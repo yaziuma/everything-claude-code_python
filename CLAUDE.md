@@ -77,6 +77,7 @@ Python + htmx向けに最適化予定。
 - **テンプレート**: Jinja2
 - **バリデーション**: Pydantic
 - **テスト**: pytest
+- **フロントエンド**: htmx
 
 ## タスク
 
@@ -85,7 +86,7 @@ Python + htmx向けに最適化予定。
 - [ ] ルール定義をPython向けに修正（rules/）
 - [ ] コマンド定義をPython向けに修正（commands/）
 - [ ] スキル定義をPython向けに修正（skills/）
-- [ ] フック設定をPython向けに修正（hooks/）- Prettier→Ruff、tsc→mypy等
+- [ ] フック設定をPython向けに修正（hooks/）- Prettier→Ruff、tsc→mypy
 - [ ] MCP設定の整理（mcp-configs/）
 
 ## 利用可能なコマンド

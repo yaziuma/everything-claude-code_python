@@ -20,8 +20,8 @@ model: opus
 
 ## 利用可能なツール
 
-### Playwrightテストフレームワーク
-- **@playwright/test** - コアテストフレームワーク
+### Playwrightテストフレームワーク（Python）
+- **pytest-playwright** - Playwrightのpytest統合
 - **Playwright Inspector** - テストをインタラクティブにデバッグ
 - **Playwright Trace Viewer** - テスト実行を分析
 - **Playwright Codegen** - ブラウザアクションからテストコードを生成
@@ -29,33 +29,36 @@ model: opus
 ### テストコマンド
 ```bash
 # すべてのE2Eテストを実行
-npx playwright test
+pytest tests/e2e/
 
 # 特定のテストファイルを実行
-npx playwright test tests/markets.spec.ts
+pytest tests/e2e/test_markets.py
 
 # ヘッドモードでテストを実行（ブラウザを表示）
-npx playwright test --headed
+pytest tests/e2e/ --headed
 
-# インスペクターでテストをデバッグ
-npx playwright test --debug
+# 詳細出力でテストを実行
+pytest tests/e2e/ -v
+
+# 特定のテスト関数を実行
+pytest tests/e2e/test_markets.py::test_search_markets -v
 
 # アクションからテストコードを生成
-npx playwright codegen http://localhost:3000
+playwright codegen http://localhost:8000
 
 # トレース付きでテストを実行
-npx playwright test --trace on
+pytest tests/e2e/ --tracing on
 
 # HTMLレポートを表示
-npx playwright show-report
+playwright show-report
 
-# スナップショットを更新
-npx playwright test --update-snapshots
+# スクリーンショットを有効化
+pytest tests/e2e/ --screenshot on
 
 # 特定のブラウザでテストを実行
-npx playwright test --project=chromium
-npx playwright test --project=firefox
-npx playwright test --project=webkit
+pytest tests/e2e/ --browser chromium
+pytest tests/e2e/ --browser firefox
+pytest tests/e2e/ --browser webkit
 ```
 
 ## E2Eテストワークフロー
@@ -64,9 +67,9 @@ npx playwright test --project=webkit
 ```
 a) 重要なユーザージャーニーを特定
    - 認証フロー（ログイン、ログアウト、登録）
-   - コア機能（マーケット作成、取引、検索）
-   - 支払いフロー（入金、出金）
-   - データ整合性（CRUD操作）
+   - コア機能（CRUD操作、検索、フィルタリング）
+   - フォーム送信とバリデーション
+   - ナビゲーションフロー
 
 b) テストシナリオを定義
    - ハッピーパス（すべてが動作）
@@ -74,7 +77,7 @@ b) テストシナリオを定義
    - エラーケース（ネットワーク障害、検証）
 
 c) リスクで優先順位付け
-   - HIGH: 金融取引、認証
+   - HIGH: 認証、データ操作
    - MEDIUM: 検索、フィルタリング、ナビゲーション
    - LOW: UI装飾、アニメーション、スタイリング
 ```
@@ -110,9 +113,9 @@ a) ローカルでテストを実行
    - 生成されたアーティファクトをレビュー
 
 b) 不安定テストを隔離
-   - 不安定なテストを@flakyでマーク
+   - 不安定なテストをpytest.mark.flakyでマーク
    - 修正のためのissueを作成
-   - CIから一時的に削除
+   - CIから一時的に除外
 
 c) CI/CDで実行
    - プルリクエストで実行
@@ -126,346 +129,266 @@ c) CI/CDで実行
 ```
 tests/
 ├── e2e/                       # エンドツーエンドユーザージャーニー
-│   ├── auth/                  # 認証フロー
-│   │   ├── login.spec.ts
-│   │   ├── logout.spec.ts
-│   │   └── register.spec.ts
-│   ├── markets/               # マーケット機能
-│   │   ├── browse.spec.ts
-│   │   ├── search.spec.ts
-│   │   ├── create.spec.ts
-│   │   └── trade.spec.ts
-│   ├── wallet/                # ウォレット操作
-│   │   ├── connect.spec.ts
-│   │   └── transactions.spec.ts
-│   └── api/                   # APIエンドポイントテスト
-│       ├── markets-api.spec.ts
-│       └── search-api.spec.ts
-├── fixtures/                  # テストデータとヘルパー
-│   ├── auth.ts                # 認証フィクスチャ
-│   ├── markets.ts             # マーケットテストデータ
-│   └── wallets.ts             # ウォレットフィクスチャ
-└── playwright.config.ts       # Playwright設定
+│   ├── conftest.py            # pytestフィクスチャ
+│   ├── test_auth.py           # 認証フロー
+│   ├── test_search.py         # 検索機能
+│   ├── test_crud.py           # CRUD操作
+│   └── test_navigation.py     # ナビゲーション
+├── pages/                     # Page Objectモデル
+│   ├── __init__.py
+│   ├── base_page.py           # 基底ページクラス
+│   ├── home_page.py           # ホームページ
+│   ├── login_page.py          # ログインページ
+│   └── search_page.py         # 検索ページ
+└── pytest.ini                 # pytest設定
 ```
 
 ### Page Object Modelパターン
 
-```typescript
-// pages/MarketsPage.ts
-import { Page, Locator } from '@playwright/test'
+```python
+# tests/pages/search_page.py
+from playwright.sync_api import Page, Locator
 
-export class MarketsPage {
-  readonly page: Page
-  readonly searchInput: Locator
-  readonly marketCards: Locator
-  readonly createMarketButton: Locator
-  readonly filterDropdown: Locator
 
-  constructor(page: Page) {
-    this.page = page
-    this.searchInput = page.locator('[data-testid="search-input"]')
-    this.marketCards = page.locator('[data-testid="market-card"]')
-    this.createMarketButton = page.locator('[data-testid="create-market-btn"]')
-    this.filterDropdown = page.locator('[data-testid="filter-dropdown"]')
-  }
+class SearchPage:
+    def __init__(self, page: Page):
+        self.page = page
+        self.search_input: Locator = page.locator('[data-testid="search-input"]')
+        self.result_cards: Locator = page.locator('[data-testid="result-card"]')
+        self.no_results: Locator = page.locator('[data-testid="no-results"]')
+        self.filter_dropdown: Locator = page.locator('[data-testid="filter-dropdown"]')
 
-  async goto() {
-    await this.page.goto('/markets')
-    await this.page.waitForLoadState('networkidle')
-  }
+    def goto(self):
+        self.page.goto("/search")
+        self.page.wait_for_load_state("networkidle")
 
-  async searchMarkets(query: string) {
-    await this.searchInput.fill(query)
-    await this.page.waitForResponse(resp => resp.url().includes('/api/markets/search'))
-    await this.page.waitForLoadState('networkidle')
-  }
+    def search(self, query: str):
+        self.search_input.fill(query)
+        self.page.wait_for_response(
+            lambda resp: "/api/search" in resp.url
+        )
+        self.page.wait_for_load_state("networkidle")
 
-  async getMarketCount() {
-    return await this.marketCards.count()
-  }
+    def get_result_count(self) -> int:
+        return self.result_cards.count()
 
-  async clickMarket(index: number) {
-    await this.marketCards.nth(index).click()
-  }
+    def click_result(self, index: int):
+        self.result_cards.nth(index).click()
 
-  async filterByStatus(status: string) {
-    await this.filterDropdown.selectOption(status)
-    await this.page.waitForLoadState('networkidle')
-  }
-}
+    def filter_by_status(self, status: str):
+        self.filter_dropdown.select_option(status)
+        self.page.wait_for_load_state("networkidle")
 ```
 
 ### ベストプラクティス付きテスト例
 
-```typescript
-// tests/e2e/markets/search.spec.ts
-import { test, expect } from '@playwright/test'
-import { MarketsPage } from '../../pages/MarketsPage'
+```python
+# tests/e2e/test_search.py
+import pytest
+from playwright.sync_api import Page, expect
 
-test.describe('マーケット検索', () => {
-  let marketsPage: MarketsPage
+from tests.pages.search_page import SearchPage
 
-  test.beforeEach(async ({ page }) => {
-    marketsPage = new MarketsPage(page)
-    await marketsPage.goto()
-  })
 
-  test('キーワードでマーケットを検索できる', async ({ page }) => {
-    // Arrange
-    await expect(page).toHaveTitle(/Markets/)
+class TestSearch:
+    """検索機能のE2Eテスト"""
 
-    // Act
-    await marketsPage.searchMarkets('trump')
+    @pytest.fixture(autouse=True)
+    def setup(self, page: Page):
+        self.page = page
+        self.search_page = SearchPage(page)
+        self.search_page.goto()
 
-    // Assert
-    const marketCount = await marketsPage.getMarketCount()
-    expect(marketCount).toBeGreaterThan(0)
+    def test_search_with_keyword(self, page: Page):
+        """キーワードで検索できる"""
+        # Arrange
+        expect(page).to_have_title("Search")
 
-    // 最初の結果に検索語が含まれることを確認
-    const firstMarket = marketsPage.marketCards.first()
-    await expect(firstMarket).toContainText(/trump/i)
+        # Act
+        self.search_page.search("python")
 
-    // 確認用スクリーンショットを撮影
-    await page.screenshot({ path: 'artifacts/search-results.png' })
-  })
+        # Assert
+        result_count = self.search_page.get_result_count()
+        assert result_count > 0
 
-  test('結果なしを適切に処理する', async ({ page }) => {
-    // Act
-    await marketsPage.searchMarkets('xyznonexistentmarket123')
+        # 最初の結果に検索語が含まれることを確認
+        first_result = self.search_page.result_cards.first
+        expect(first_result).to_contain_text("python", ignore_case=True)
 
-    // Assert
-    await expect(page.locator('[data-testid="no-results"]')).toBeVisible()
-    const marketCount = await marketsPage.getMarketCount()
-    expect(marketCount).toBe(0)
-  })
+        # 確認用スクリーンショットを撮影
+        page.screenshot(path="artifacts/search-results.png")
 
-  test('検索結果をクリアできる', async ({ page }) => {
-    // Arrange - まず検索を実行
-    await marketsPage.searchMarkets('trump')
-    await expect(marketsPage.marketCards.first()).toBeVisible()
+    def test_search_no_results(self, page: Page):
+        """結果なしを適切に処理する"""
+        # Act
+        self.search_page.search("xyznonexistent123")
 
-    // Act - 検索をクリア
-    await marketsPage.searchInput.clear()
-    await page.waitForLoadState('networkidle')
+        # Assert
+        expect(self.search_page.no_results).to_be_visible()
+        assert self.search_page.get_result_count() == 0
 
-    // Assert - すべてのマーケットが再度表示される
-    const marketCount = await marketsPage.getMarketCount()
-    expect(marketCount).toBeGreaterThan(10) // すべてのマーケットを表示
-  })
-})
+    def test_clear_search(self, page: Page):
+        """検索結果をクリアできる"""
+        # Arrange - まず検索を実行
+        self.search_page.search("python")
+        expect(self.search_page.result_cards.first).to_be_visible()
+
+        # Act - 検索をクリア
+        self.search_page.search_input.clear()
+        page.wait_for_load_state("networkidle")
+
+        # Assert - すべての結果が再度表示される
+        result_count = self.search_page.get_result_count()
+        assert result_count > 10  # すべての結果を表示
 ```
 
 ## プロジェクト固有テストシナリオ例
 
 ### 例プロジェクトの重要ユーザージャーニー
 
-**1. マーケット閲覧フロー**
-```typescript
-test('ユーザーはマーケットを閲覧・表示できる', async ({ page }) => {
-  // 1. マーケットページに移動
-  await page.goto('/markets')
-  await expect(page.locator('h1')).toContainText('Markets')
+**1. ホームページ閲覧フロー**
+```python
+def test_user_can_browse_home(page: Page):
+    """ユーザーはホームページを閲覧できる"""
+    # 1. ホームページに移動
+    page.goto("/")
+    expect(page.locator("h1")).to_contain_text("Welcome")
 
-  // 2. マーケットが読み込まれることを確認
-  const marketCards = page.locator('[data-testid="market-card"]')
-  await expect(marketCards.first()).toBeVisible()
+    # 2. コンテンツが読み込まれることを確認
+    cards = page.locator('[data-testid="content-card"]')
+    expect(cards.first).to_be_visible()
 
-  // 3. マーケットをクリック
-  await marketCards.first().click()
+    # 3. カードをクリック
+    cards.first.click()
 
-  // 4. マーケット詳細ページを確認
-  await expect(page).toHaveURL(/\/markets\/[a-z0-9-]+/)
-  await expect(page.locator('[data-testid="market-name"]')).toBeVisible()
-
-  // 5. チャートが読み込まれることを確認
-  await expect(page.locator('[data-testid="price-chart"]')).toBeVisible()
-})
+    # 4. 詳細ページを確認
+    expect(page).to_have_url(re.compile(r"/items/[a-z0-9-]+"))
+    expect(page.locator('[data-testid="item-name"]')).to_be_visible()
 ```
 
-**2. セマンティック検索フロー**
-```typescript
-test('セマンティック検索が関連結果を返す', async ({ page }) => {
-  // 1. マーケットに移動
-  await page.goto('/markets')
+**2. 認証フロー**
+```python
+def test_user_can_login(page: Page):
+    """ユーザーはログインできる"""
+    # 1. ログインページに移動
+    page.goto("/login")
 
-  // 2. 検索クエリを入力
-  const searchInput = page.locator('[data-testid="search-input"]')
-  await searchInput.fill('election')
+    # 2. 認証情報を入力
+    page.locator('[data-testid="email-input"]').fill("test@example.com")
+    page.locator('[data-testid="password-input"]').fill("testpassword")
 
-  // 3. API呼び出しを待機
-  await page.waitForResponse(resp =>
-    resp.url().includes('/api/markets/search') && resp.status() === 200
-  )
+    # 3. ログインボタンをクリック
+    page.locator('[data-testid="login-button"]').click()
 
-  // 4. 結果に関連マーケットが含まれることを確認
-  const results = page.locator('[data-testid="market-card"]')
-  await expect(results).not.toHaveCount(0)
+    # 4. ダッシュボードへのリダイレクトを確認
+    expect(page).to_have_url("/dashboard")
+    expect(page.locator('[data-testid="user-menu"]')).to_be_visible()
 
-  // 5. セマンティック関連性を確認（単純な部分文字列マッチではない）
-  const firstResult = results.first()
-  const text = await firstResult.textContent()
-  expect(text?.toLowerCase()).toMatch(/election|trump|biden|president|vote/)
-})
+
+def test_user_can_logout(page: Page, authenticated_page: Page):
+    """ユーザーはログアウトできる"""
+    # 前提条件: ユーザーがログイン済み
+    page.goto("/dashboard")
+
+    # 1. ユーザーメニューをクリック
+    page.locator('[data-testid="user-menu"]').click()
+
+    # 2. ログアウトをクリック
+    page.locator('[data-testid="logout-button"]').click()
+
+    # 3. ログインページへのリダイレクトを確認
+    expect(page).to_have_url("/login")
 ```
 
-**3. ウォレット接続フロー**
-```typescript
-test('ユーザーはウォレットを接続できる', async ({ page, context }) => {
-  // セットアップ: Privyウォレット拡張をモック
-  await context.addInitScript(() => {
-    // @ts-ignore
-    window.ethereum = {
-      isMetaMask: true,
-      request: async ({ method }) => {
-        if (method === 'eth_requestAccounts') {
-          return ['0x1234567890123456789012345678901234567890']
-        }
-        if (method === 'eth_chainId') {
-          return '0x1'
-        }
-      }
-    }
-  })
+**3. フォーム送信フロー**
+```python
+def test_user_can_submit_form(page: Page, authenticated_page: Page):
+    """認証済みユーザーはフォームを送信できる"""
+    # 1. フォームページに移動
+    page.goto("/create")
 
-  // 1. サイトに移動
-  await page.goto('/')
+    # 2. フォームを入力
+    page.locator('[data-testid="title-input"]').fill("Test Title")
+    page.locator('[data-testid="description-input"]').fill("Test Description")
 
-  // 2. ウォレット接続をクリック
-  await page.locator('[data-testid="connect-wallet"]').click()
+    # 3. フォームを送信
+    page.locator('[data-testid="submit-button"]').click()
 
-  // 3. ウォレットモーダルが表示されることを確認
-  await expect(page.locator('[data-testid="wallet-modal"]')).toBeVisible()
+    # 4. API呼び出しを待機
+    page.wait_for_response(
+        lambda resp: "/api/items" in resp.url and resp.status == 201
+    )
 
-  // 4. ウォレットプロバイダーを選択
-  await page.locator('[data-testid="wallet-provider-metamask"]').click()
-
-  // 5. 接続成功を確認
-  await expect(page.locator('[data-testid="wallet-address"]')).toBeVisible()
-  await expect(page.locator('[data-testid="wallet-address"]')).toContainText('0x1234')
-})
+    # 5. 成功を確認
+    expect(page.locator('[data-testid="success-message"]')).to_be_visible()
 ```
 
-**4. マーケット作成フロー（認証済み）**
-```typescript
-test('認証済みユーザーはマーケットを作成できる', async ({ page }) => {
-  // 前提条件: ユーザーが認証済み
-  await page.goto('/creator-dashboard')
+**4. htmxインタラクション**
+```python
+def test_htmx_partial_update(page: Page):
+    """htmxによる部分更新が動作する"""
+    # 1. ページに移動
+    page.goto("/items")
 
-  // 認証を確認（認証されていない場合はテストをスキップ）
-  const isAuthenticated = await page.locator('[data-testid="user-menu"]').isVisible()
-  test.skip(!isAuthenticated, 'ユーザーが認証されていません')
+    # 2. 更新ボタンをクリック（htmx）
+    page.locator('[hx-get="/api/items/partial"]').click()
 
-  // 1. マーケット作成ボタンをクリック
-  await page.locator('[data-testid="create-market"]').click()
+    # 3. 部分更新を待機
+    page.wait_for_selector('[data-testid="updated-content"]')
 
-  // 2. マーケットフォームを入力
-  await page.locator('[data-testid="market-name"]').fill('テストマーケット')
-  await page.locator('[data-testid="market-description"]').fill('これはテストマーケットです')
-  await page.locator('[data-testid="market-end-date"]').fill('2025-12-31')
-
-  // 3. フォームを送信
-  await page.locator('[data-testid="submit-market"]').click()
-
-  // 4. 成功を確認
-  await expect(page.locator('[data-testid="success-message"]')).toBeVisible()
-
-  // 5. 新しいマーケットへのリダイレクトを確認
-  await expect(page).toHaveURL(/\/markets\/test-market/)
-})
-```
-
-**5. 取引フロー（重要 - 実際のお金）**
-```typescript
-test('ユーザーは十分な残高で取引を行える', async ({ page }) => {
-  // 警告: このテストは実際のお金を含む - testnet/stagingのみ使用！
-  test.skip(process.env.NODE_ENV === 'production', '本番環境ではスキップ')
-
-  // 1. マーケットに移動
-  await page.goto('/markets/test-market')
-
-  // 2. ウォレットを接続（テスト資金付き）
-  await page.locator('[data-testid="connect-wallet"]').click()
-  // ... ウォレット接続フロー
-
-  // 3. ポジションを選択（Yes/No）
-  await page.locator('[data-testid="position-yes"]').click()
-
-  // 4. 取引金額を入力
-  await page.locator('[data-testid="trade-amount"]').fill('1.0')
-
-  // 5. 取引プレビューを確認
-  const preview = page.locator('[data-testid="trade-preview"]')
-  await expect(preview).toContainText('1.0 SOL')
-  await expect(preview).toContainText('推定シェア:')
-
-  // 6. 取引を確認
-  await page.locator('[data-testid="confirm-trade"]').click()
-
-  // 7. ブロックチェーントランザクションを待機
-  await page.waitForResponse(resp =>
-    resp.url().includes('/api/trade') && resp.status() === 200,
-    { timeout: 30000 } // ブロックチェーンは遅い場合がある
-  )
-
-  // 8. 成功を確認
-  await expect(page.locator('[data-testid="trade-success"]')).toBeVisible()
-
-  // 9. 残高が更新されたことを確認
-  const balance = page.locator('[data-testid="wallet-balance"]')
-  await expect(balance).not.toContainText('--')
-})
+    # 4. コンテンツが更新されたことを確認
+    expect(page.locator('[data-testid="updated-content"]')).to_be_visible()
 ```
 
 ## Playwright設定
 
-```typescript
-// playwright.config.ts
-import { defineConfig, devices } from '@playwright/test'
+```python
+# conftest.py
+import pytest
+from playwright.sync_api import Page, Browser
+from typing import Generator
 
-export default defineConfig({
-  testDir: './tests/e2e',
-  fullyParallel: true,
-  forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
-  workers: process.env.CI ? 1 : undefined,
-  reporter: [
-    ['html', { outputFolder: 'playwright-report' }],
-    ['junit', { outputFile: 'playwright-results.xml' }],
-    ['json', { outputFile: 'playwright-results.json' }]
-  ],
-  use: {
-    baseURL: process.env.BASE_URL || 'http://localhost:3000',
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
-    actionTimeout: 10000,
-    navigationTimeout: 30000,
-  },
-  projects: [
-    {
-      name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
-    },
-    {
-      name: 'firefox',
-      use: { ...devices['Desktop Firefox'] },
-    },
-    {
-      name: 'webkit',
-      use: { ...devices['Desktop Safari'] },
-    },
-    {
-      name: 'mobile-chrome',
-      use: { ...devices['Pixel 5'] },
-    },
-  ],
-  webServer: {
-    command: 'npm run dev',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120000,
-  },
-})
+
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args):
+    return {
+        **browser_context_args,
+        "viewport": {"width": 1280, "height": 720},
+        "base_url": "http://localhost:8000",
+    }
+
+
+@pytest.fixture
+def authenticated_page(page: Page) -> Generator[Page, None, None]:
+    """認証済みのページを提供"""
+    page.goto("/login")
+    page.locator('[data-testid="email-input"]').fill("test@example.com")
+    page.locator('[data-testid="password-input"]').fill("testpassword")
+    page.locator('[data-testid="login-button"]').click()
+    page.wait_for_url("/dashboard")
+    yield page
+
+
+# pytest.ini
+[pytest]
+addopts = --browser chromium --headed
+base_url = http://localhost:8000
+timeout = 30000
+```
+
+```toml
+# pyproject.toml
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+markers = [
+    "slow: marks tests as slow",
+    "flaky: marks tests as flaky",
+]
+
+[tool.playwright]
+timeout = 30000
 ```
 
 ## 不安定テスト管理
@@ -473,98 +396,89 @@ export default defineConfig({
 ### 不安定テストの特定
 ```bash
 # テストを複数回実行して安定性をチェック
-npx playwright test tests/markets/search.spec.ts --repeat-each=10
+pytest tests/e2e/test_search.py --count=10
 
 # リトライ付きで特定のテストを実行
-npx playwright test tests/markets/search.spec.ts --retries=3
+pytest tests/e2e/test_search.py --reruns 3
 ```
 
 ### 隔離パターン
-```typescript
-// 不安定テストを隔離用にマーク
-test('不安定: 複雑クエリでのマーケット検索', async ({ page }) => {
-  test.fixme(true, 'テストが不安定 - Issue #123')
+```python
+import pytest
 
-  // テストコードここ...
-})
+# 不安定テストを隔離用にマーク
+@pytest.mark.flaky(reruns=3, reruns_delay=1)
+def test_complex_search():
+    """不安定: 複雑クエリでの検索"""
+    # テストコードここ...
 
-// または条件付きスキップを使用
-test('複雑クエリでのマーケット検索', async ({ page }) => {
-  test.skip(process.env.CI, 'CIで不安定 - Issue #123')
 
-  // テストコードここ...
-})
+# または条件付きスキップを使用
+@pytest.mark.skipif(
+    os.environ.get("CI") == "true",
+    reason="CIで不安定 - Issue #123"
+)
+def test_complex_search():
+    # テストコードここ...
 ```
 
 ### 一般的な不安定性の原因と修正
 
 **1. 競合状態**
-```typescript
-// ❌ 不安定: 要素の準備を仮定
-await page.click('[data-testid="button"]')
+```python
+# ❌ 不安定: 要素の準備を仮定
+page.click('[data-testid="button"]')
 
-// ✅ 安定: 要素の準備を待機
-await page.locator('[data-testid="button"]').click() // 組み込み自動待機
+# ✅ 安定: 要素の準備を待機
+page.locator('[data-testid="button"]').click()  # 組み込み自動待機
 ```
 
 **2. ネットワークタイミング**
-```typescript
-// ❌ 不安定: 任意のタイムアウト
-await page.waitForTimeout(5000)
+```python
+# ❌ 不安定: 任意のタイムアウト
+page.wait_for_timeout(5000)
 
-// ✅ 安定: 特定の条件を待機
-await page.waitForResponse(resp => resp.url().includes('/api/markets'))
+# ✅ 安定: 特定の条件を待機
+page.wait_for_response(lambda resp: "/api/items" in resp.url)
 ```
 
 **3. アニメーションタイミング**
-```typescript
-// ❌ 不安定: アニメーション中にクリック
-await page.click('[data-testid="menu-item"]')
+```python
+# ❌ 不安定: アニメーション中にクリック
+page.click('[data-testid="menu-item"]')
 
-// ✅ 安定: アニメーション完了を待機
-await page.locator('[data-testid="menu-item"]').waitFor({ state: 'visible' })
-await page.waitForLoadState('networkidle')
-await page.click('[data-testid="menu-item"]')
+# ✅ 安定: アニメーション完了を待機
+page.locator('[data-testid="menu-item"]').wait_for(state="visible")
+page.wait_for_load_state("networkidle")
+page.click('[data-testid="menu-item"]')
 ```
 
 ## アーティファクト管理
 
 ### スクリーンショット戦略
-```typescript
-// 主要ポイントでスクリーンショットを撮影
-await page.screenshot({ path: 'artifacts/after-login.png' })
+```python
+# 主要ポイントでスクリーンショットを撮影
+page.screenshot(path="artifacts/after-login.png")
 
-// フルページスクリーンショット
-await page.screenshot({ path: 'artifacts/full-page.png', fullPage: true })
+# フルページスクリーンショット
+page.screenshot(path="artifacts/full-page.png", full_page=True)
 
-// 要素スクリーンショット
-await page.locator('[data-testid="chart"]').screenshot({
-  path: 'artifacts/chart.png'
-})
+# 要素スクリーンショット
+page.locator('[data-testid="chart"]').screenshot(
+    path="artifacts/chart.png"
+)
 ```
 
 ### トレース収集
-```typescript
-// トレースを開始
-await browser.startTracing(page, {
-  path: 'artifacts/trace.json',
-  screenshots: true,
-  snapshots: true,
-})
-
-// ... テストアクション ...
-
-// トレースを停止
-await browser.stopTracing()
-```
-
-### 動画録画
-```typescript
-// playwright.config.tsで設定
-use: {
-  video: 'retain-on-failure', // テスト失敗時のみ動画を保存
-  videosPath: 'artifacts/videos/'
-}
+```python
+# conftest.pyで設定
+@pytest.fixture
+def context(browser: Browser):
+    context = browser.new_context()
+    context.tracing.start(screenshots=True, snapshots=True)
+    yield context
+    context.tracing.stop(path="artifacts/trace.zip")
+    context.close()
 ```
 
 ## CI/CD統合
@@ -580,37 +494,36 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v3
+      - name: Pythonセットアップ
+        uses: actions/setup-python@v5
         with:
-          node-version: 18
+          python-version: '3.12'
 
       - name: 依存関係をインストール
-        run: npm ci
+        run: |
+          pip install -r requirements.txt
+          pip install pytest-playwright
+          playwright install --with-deps
 
-      - name: Playwrightブラウザをインストール
-        run: npx playwright install --with-deps
+      - name: アプリを起動
+        run: |
+          uvicorn app.main:app --host 0.0.0.0 --port 8000 &
+          sleep 5
 
       - name: E2Eテストを実行
-        run: npx playwright test
-        env:
-          BASE_URL: https://staging.pmx.trade
+        run: pytest tests/e2e/ --browser chromium
 
       - name: アーティファクトをアップロード
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            artifacts/
+            playwright-report/
           retention-days: 30
-
-      - name: テスト結果をアップロード
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: playwright-results
-          path: playwright-results.xml
 ```
 
 ## テストレポート形式
@@ -632,64 +545,30 @@ jobs:
 
 ## スイート別テスト結果
 
-### マーケット - 閲覧・検索
-- ✅ ユーザーはマーケットを閲覧できる (2.3s)
-- ✅ セマンティック検索が関連結果を返す (1.8s)
-- ✅ 検索で結果なしを処理 (1.2s)
+### 認証 - ログイン/ログアウト
+- ✅ ユーザーはログインできる (2.3s)
+- ✅ ユーザーはログアウトできる (1.8s)
+- ✅ 無効な認証情報でエラー表示 (1.2s)
+
+### 検索 - 閲覧・検索
+- ✅ キーワードで検索できる (2.1s)
 - ❌ 特殊文字での検索 (0.9s)
-
-### ウォレット - 接続
-- ✅ ユーザーはMetaMaskを接続できる (3.1s)
-- ⚠️  ユーザーはPhantomを接続できる (2.8s) - 不安定
-- ✅ ユーザーはウォレットを切断できる (1.5s)
-
-### 取引 - コアフロー
-- ✅ ユーザーは買い注文を出せる (5.2s)
-- ❌ ユーザーは売り注文を出せる (4.8s)
-- ✅ 残高不足でエラーを表示 (1.9s)
+- ✅ 検索結果をクリアできる (1.5s)
 
 ## 失敗テスト
 
 ### 1. 特殊文字での検索
-**ファイル:** `tests/e2e/markets/search.spec.ts:45`
+**ファイル:** `tests/e2e/test_search.py:45`
 **エラー:** 要素が表示されることを期待したが、見つからない
 **スクリーンショット:** artifacts/search-special-chars-failed.png
-**トレース:** artifacts/trace-123.zip
-
-**再現手順:**
-1. /marketsに移動
-2. 特殊文字付き検索クエリを入力: "trump & biden"
-3. 結果を確認
 
 **推奨修正:** 検索クエリの特殊文字をエスケープ
-
----
-
-### 2. ユーザーは売り注文を出せる
-**ファイル:** `tests/e2e/trading/sell.spec.ts:28`
-**エラー:** APIレスポンス /api/trade の待機タイムアウト
-**動画:** artifacts/videos/sell-order-failed.webm
-
-**考えられる原因:**
-- ブロックチェーンネットワークが遅い
-- ガス不足
-- トランザクションが取り消された
-
-**推奨修正:** タイムアウトを増加またはブロックチェーンログをチェック
 
 ## アーティファクト
 
 - HTMLレポート: playwright-report/index.html
-- スクリーンショット: artifacts/*.png (12ファイル)
-- 動画: artifacts/videos/*.webm (2ファイル)
-- トレース: artifacts/*.zip (2ファイル)
-- JUnit XML: playwright-results.xml
-
-## 次のステップ
-
-- [ ] 2つの失敗テストを修正
-- [ ] 1つの不安定テストを調査
-- [ ] すべて緑になったらレビューしてマージ
+- スクリーンショット: artifacts/*.png
+- トレース: artifacts/*.zip
 ```
 
 ## 成功指標
@@ -705,4 +584,4 @@ E2Eテスト実行後:
 
 ---
 
-**覚えておくこと**: E2Eテストは本番前の最後の防御線です。ユニットテストが見逃す統合問題をキャッチします。安定で高速で包括的にするために時間を投資してください。例プロジェクトでは特に金融フローに焦点を当ててください - 一つのバグがユーザーに実際のお金を失わせる可能性があります。
+**覚えておくこと**: E2Eテストは本番前の最後の防御線です。ユニットテストが見逃す統合問題をキャッチします。安定で高速で包括的にするために時間を投資してください。

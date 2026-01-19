@@ -4,20 +4,31 @@
 
 常に新しいオブジェクトを作成し、決してミューテートしない：
 
-```javascript
-// 間違い：ミューテーション
-function updateUser(user, name) {
-  user.name = name  // ミューテーション！
-  return user
-}
+```python
+# 間違い：ミューテーション
+def update_user(user: dict, name: str) -> dict:
+    user["name"] = name  # ミューテーション！
+    return user
 
-// 正しい：不変性
-function updateUser(user, name) {
-  return {
-    ...user,
-    name
-  }
-}
+# 正しい：不変性
+def update_user(user: dict, name: str) -> dict:
+    return {
+        **user,
+        "name": name
+    }
+
+# ベスト：Pydanticモデルで不変性
+from pydantic import BaseModel
+
+class User(BaseModel):
+    model_config = {"frozen": True}  # イミュータブル
+
+    id: int
+    name: str
+    email: str
+
+# 更新は新しいインスタンスを作成
+updated_user = user.model_copy(update={"name": new_name})
 ```
 
 ## ファイル構成
@@ -25,36 +36,89 @@ function updateUser(user, name) {
 少数の大きなファイルより多数の小さなファイル：
 - 高凝集、低結合
 - 200-400行が典型、最大800行
-- 大きなコンポーネントからユーティリティを抽出
+- 大きなモジュールからユーティリティを抽出
 - 型ではなく機能/ドメインで整理
+
+```
+app/
+├── users/
+│   ├── __init__.py
+│   ├── router.py      # APIエンドポイント
+│   ├── service.py     # ビジネスロジック
+│   ├── repository.py  # データアクセス
+│   ├── schemas.py     # Pydanticモデル
+│   └── models.py      # SQLAlchemyモデル
+├── items/
+│   └── ...
+└── core/
+    ├── config.py
+    └── dependencies.py
+```
 
 ## エラーハンドリング
 
 常に包括的にエラーを処理：
 
-```typescript
-try {
-  const result = await riskyOperation()
-  return result
-} catch (error) {
-  console.error('操作が失敗しました:', error)
-  throw new Error('詳細なユーザーフレンドリーメッセージ')
-}
+```python
+import logging
+from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
+
+async def risky_operation():
+    try:
+        result = await some_async_task()
+        return result
+    except ValueError as e:
+        logger.error(f"バリデーションエラー: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail="詳細なユーザーフレンドリーメッセージ"
+        )
+    except Exception as e:
+        logger.exception("予期しないエラー")
+        raise HTTPException(
+            status_code=500,
+            detail="内部サーバーエラー"
+        )
 ```
 
 ## 入力検証
 
-常にユーザー入力を検証：
+常にユーザー入力をPydanticで検証：
 
-```typescript
-import { z } from 'zod'
+```python
+from pydantic import BaseModel, EmailStr, Field
 
-const schema = z.object({
-  email: z.string().email(),
-  age: z.number().int().min(0).max(150)
-})
+class UserCreate(BaseModel):
+    email: EmailStr
+    age: int = Field(ge=0, le=150)
+    name: str = Field(min_length=1, max_length=100)
 
-const validated = schema.parse(input)
+# FastAPIエンドポイントで自動検証
+@router.post("/users")
+async def create_user(user: UserCreate):
+    # user は既に検証済み
+    return await user_service.create(user)
+```
+
+## 型注釈
+
+すべての関数に型注釈を付ける：
+
+```python
+from typing import Optional
+
+def get_user_by_id(user_id: int) -> Optional[User]:
+    """ユーザーをIDで取得"""
+    ...
+
+async def list_users(
+    skip: int = 0,
+    limit: int = 100
+) -> list[User]:
+    """ユーザー一覧を取得"""
+    ...
 ```
 
 ## コード品質チェックリスト
@@ -65,6 +129,8 @@ const validated = schema.parse(input)
 - [ ] ファイルが集中している（800行未満）
 - [ ] 深いネストなし（4レベル超）
 - [ ] 適切なエラーハンドリング
-- [ ] console.log文なし
+- [ ] print文なし（本番コード）
 - [ ] ハードコードされた値なし
 - [ ] ミューテーションなし（不変パターンを使用）
+- [ ] 型注釈が完全
+- [ ] PEP 8準拠（Ruffでチェック）

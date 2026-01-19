@@ -40,8 +40,22 @@
 
 ## ビルドトラブルシューティング
 
-ビルドが失敗した場合:
+mypy/Ruffエラーが発生した場合:
 1. **build-error-resolver**エージェントを使用
 2. エラーメッセージを分析
 3. 段階的に修正
 4. 各修正後に検証
+
+```bash
+# 型チェック
+mypy app/ --strict
+
+# リントチェック
+ruff check app/
+
+# 自動修正
+ruff check app/ --fix
+
+# フォーマット
+ruff format app/
+```

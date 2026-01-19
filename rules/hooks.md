@@ -9,18 +9,18 @@
 ## 現在のフック（~/.claude/settings.json内）
 
 ### PreToolUse
-- **tmuxリマインダー**: 長時間実行コマンド（npm、pnpm、yarn、cargoなど）にtmuxを提案
-- **git pushレビュー**: プッシュ前にレビューのためZedを開く
+- **tmuxリマインダー**: 長時間実行コマンド（pip、poetry、uvicorn、gunicornなど）にtmuxを提案
+- **git pushレビュー**: プッシュ前にレビューのためエディタを開く
 - **docブロッカー**: 不要な.md/.txtファイルの作成をブロック
 
 ### PostToolUse
 - **PR作成**: PR URLとGitHub Actionsステータスをログ
-- **Prettier**: 編集後にJS/TSファイルを自動フォーマット
-- **TypeScriptチェック**: .ts/.tsxファイル編集後にtscを実行
-- **console.log警告**: 編集されたファイル内のconsole.logについて警告
+- **Ruff**: 編集後にPythonファイルを自動フォーマット（`ruff format`）
+- **mypyチェック**: .pyファイル編集後にmypyを実行
+- **print文警告**: 編集されたファイル内のprint()について警告
 
 ### Stop
-- **console.log監査**: セッション終了前にすべての変更されたファイルでconsole.logをチェック
+- **print監査**: セッション終了前にすべての変更されたファイルでprint()をチェック
 
 ## 自動承認権限
 
@@ -44,3 +44,43 @@ Todoリストが明らかにするもの:
 - 余分な不要な項目
 - 間違った粒度
 - 誤解された要件
+
+## フック設定例
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'pip install や uvicorn は tmux で実行を推奨'"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "ruff format $CLAUDE_FILE_PATHS && ruff check --fix $CLAUDE_FILE_PATHS"
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if echo $CLAUDE_FILE_PATHS | grep -q '\\.py$'; then mypy $CLAUDE_FILE_PATHS --ignore-missing-imports; fi"
+          }
+        ]
+      }
+    ]
+  }
+}
+```

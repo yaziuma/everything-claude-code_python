@@ -41,48 +41,49 @@ model: opus
 - パストラバーサルリスク（ユーザー制御のファイルパス）
 - CSRF脆弱性
 - 認証バイパス
+- 安全でないデシリアライゼーション（pickle）
 
 ## コード品質（高）
 
 - 大きな関数（50行超）
 - 大きなファイル（800行超）
 - 深いネスト（4レベル超）
-- エラーハンドリングの不足（try/catch）
-- console.log文
-- ミューテーションパターン
+- エラーハンドリングの不足（try/except）
+- print文（本番コードに残っている）
+- ミューテーションパターン（不変性を優先）
 - 新しいコードのテスト不足
+- 型注釈の不足
 
 ## パフォーマンス（中）
 
 - 非効率なアルゴリズム（O(n log n)が可能な時にO(n²)）
-- Reactでの不要な再レンダリング
-- メモ化の不足
-- 大きなバンドルサイズ
-- 最適化されていない画像
+- 不要なデータベースクエリ（N+1問題）
 - キャッシュの不足
-- N+1クエリ
+- 大きなレスポンスペイロード
+- 同期処理がブロッキング（async推奨）
+- メモリリーク（大きなオブジェクトの保持）
 
 ## ベストプラクティス（中）
 
 - コード/コメントでの絵文字使用
 - チケットのないTODO/FIXME
-- パブリックAPIのJSDoc不足
-- アクセシビリティ問題（ARIAラベル不足、コントラスト不良）
+- パブリックAPIのdocstring不足
 - 不適切な変数命名（x、tmp、data）
 - 説明のないマジックナンバー
 - 一貫性のないフォーマット
+- PEP 8違反
 
 ## レビュー出力形式
 
 各問題について：
 ```
 [重要] ハードコードされたAPIキー
-ファイル：src/api/client.ts:42
+ファイル：app/services/client.py:42
 問題：ソースコードでAPIキーが露出
 修正：環境変数に移動
 
-const apiKey = "sk-abc123";  // ❌ 悪い
-const apiKey = process.env.API_KEY;  // ✓ 良い
+api_key = "sk-abc123"  # ❌ 悪い
+api_key = os.environ["API_KEY"]  # ✓ 良い
 ```
 
 ## 承認基準
@@ -96,9 +97,72 @@ const apiKey = process.env.API_KEY;  // ✓ 良い
 ここにプロジェクト固有のチェックを追加。例：
 - 多くの小さなファイル原則に従う（200-400行が典型、800行まで）
 - コードベースに絵文字なし
-- 不変性パターンを使用（スプレッド演算子）
-- データベースRLSポリシーを確認
-- AI統合エラーハンドリングを確認
-- キャッシュフォールバック動作を検証
+- 不変性パターンを使用
+- Pydanticでバリデーション
+- SQLAlchemy ORMでクエリ（生SQLなし）
+- FastAPI依存性注入を使用
+- Jinja2テンプレートで自動エスケープ確認
+
+## Python固有チェック
+
+### 型注釈
+```python
+# ❌ 悪い：型注釈なし
+def process(data):
+    return data.items()
+
+# ✓ 良い：型注釈あり
+def process(data: dict[str, Any]) -> list[tuple[str, Any]]:
+    return list(data.items())
+```
+
+### エラーハンドリング
+```python
+# ❌ 悪い：広すぎるexcept
+try:
+    result = do_something()
+except:
+    pass
+
+# ✓ 良い：具体的なexcept
+try:
+    result = do_something()
+except ValueError as e:
+    logger.error(f"Invalid value: {e}")
+    raise HTTPException(status_code=400, detail=str(e))
+```
+
+### 非同期処理
+```python
+# ❌ 悪い：同期的なブロッキング
+def get_data():
+    response = requests.get(url)
+    return response.json()
+
+# ✓ 良い：非同期
+async def get_data():
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+    return response.json()
+```
+
+### Pydanticバリデーション
+```python
+# ❌ 悪い：手動バリデーション
+@app.post("/users")
+def create_user(name: str, email: str):
+    if not email or "@" not in email:
+        raise HTTPException(400, "Invalid email")
+    ...
+
+# ✓ 良い：Pydanticスキーマ
+class UserCreate(BaseModel):
+    name: str
+    email: EmailStr
+
+@app.post("/users")
+def create_user(user: UserCreate):
+    ...
+```
 
 プロジェクトの`CLAUDE.md`やスキルファイルに基づいてカスタマイズ。

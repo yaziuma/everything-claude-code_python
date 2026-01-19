@@ -18,37 +18,43 @@ model: opus
 ## TDDワークフロー
 
 ### ステップ1：最初にテストを書く（RED）
-```typescript
-// 常に失敗するテストから始める
-describe('searchMarkets', () => {
-  it('セマンティックに類似したマーケットを返す', async () => {
-    const results = await searchMarkets('election')
+```python
+# 常に失敗するテストから始める
+import pytest
+from app.services.market import search_markets
 
-    expect(results).toHaveLength(5)
-    expect(results[0].name).toContain('Trump')
-    expect(results[1].name).toContain('Biden')
-  })
-})
+class TestSearchMarkets:
+    @pytest.mark.asyncio
+    async def test_returns_semantically_similar_markets(self):
+        results = await search_markets("election")
+
+        assert len(results) == 5
+        assert "Trump" in results[0].name
+        assert "Biden" in results[1].name
 ```
 
 ### ステップ2：テストを実行（失敗を確認）
 ```bash
-npm test
+pytest tests/test_market.py -v
 # テストは失敗するはず - まだ実装していない
 ```
 
 ### ステップ3：最小限の実装を書く（GREEN）
-```typescript
-export async function searchMarkets(query: string) {
-  const embedding = await generateEmbedding(query)
-  const results = await vectorSearch(embedding)
-  return results
-}
+```python
+from typing import list
+from app.models import Market
+from app.services.embedding import generate_embedding
+from app.services.vector_search import vector_search
+
+async def search_markets(query: str) -> list[Market]:
+    embedding = await generate_embedding(query)
+    results = await vector_search(embedding)
+    return results
 ```
 
 ### ステップ4：テストを実行（通過を確認）
 ```bash
-npm test
+pytest tests/test_market.py -v
 # テストは今度は通るはず
 ```
 
@@ -60,7 +66,7 @@ npm test
 
 ### ステップ6：カバレッジを確認
 ```bash
-npm run test:coverage
+pytest --cov=app --cov-report=html
 # 80%以上のカバレッジを確認
 ```
 
@@ -69,133 +75,150 @@ npm run test:coverage
 ### 1. 単体テスト（必須）
 個別の関数を分離してテスト：
 
-```typescript
-import { calculateSimilarity } from './utils'
+```python
+import pytest
+from app.utils.similarity import calculate_similarity
 
-describe('calculateSimilarity', () => {
-  it('同一の埋め込みに対して1.0を返す', () => {
-    const embedding = [0.1, 0.2, 0.3]
-    expect(calculateSimilarity(embedding, embedding)).toBe(1.0)
-  })
+class TestCalculateSimilarity:
+    def test_returns_1_for_identical_embeddings(self):
+        embedding = [0.1, 0.2, 0.3]
+        assert calculate_similarity(embedding, embedding) == 1.0
 
-  it('直交する埋め込みに対して0.0を返す', () => {
-    const a = [1, 0, 0]
-    const b = [0, 1, 0]
-    expect(calculateSimilarity(a, b)).toBe(0.0)
-  })
+    def test_returns_0_for_orthogonal_embeddings(self):
+        a = [1, 0, 0]
+        b = [0, 1, 0]
+        assert calculate_similarity(a, b) == 0.0
 
-  it('nullを適切に処理する', () => {
-    expect(() => calculateSimilarity(null, [])).toThrow()
-  })
-})
+    def test_raises_for_none_input(self):
+        with pytest.raises(ValueError):
+            calculate_similarity(None, [])
 ```
 
 ### 2. 統合テスト（必須）
 APIエンドポイントとデータベース操作をテスト：
 
-```typescript
-import { NextRequest } from 'next/server'
-import { GET } from './route'
+```python
+import pytest
+from httpx import AsyncClient
+from app.main import app
 
-describe('GET /api/markets/search', () => {
-  it('有効な結果で200を返す', async () => {
-    const request = new NextRequest('http://localhost/api/markets/search?q=trump')
-    const response = await GET(request, {})
-    const data = await response.json()
+class TestMarketsSearchEndpoint:
+    @pytest.mark.asyncio
+    async def test_returns_200_with_valid_results(self):
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            response = await client.get("/api/markets/search?q=trump")
+            data = response.json()
 
-    expect(response.status).toBe(200)
-    expect(data.success).toBe(true)
-    expect(data.results.length).toBeGreaterThan(0)
-  })
+            assert response.status_code == 200
+            assert data["success"] is True
+            assert len(data["results"]) > 0
 
-  it('クエリ不足で400を返す', async () => {
-    const request = new NextRequest('http://localhost/api/markets/search')
-    const response = await GET(request, {})
+    @pytest.mark.asyncio
+    async def test_returns_400_for_missing_query(self):
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            response = await client.get("/api/markets/search")
 
-    expect(response.status).toBe(400)
-  })
+            assert response.status_code == 400
 
-  it('Redis利用不可時に部分文字列検索にフォールバック', async () => {
-    // Redis失敗をモック
-    jest.spyOn(redis, 'searchMarketsByVector').mockRejectedValue(new Error('Redis down'))
+    @pytest.mark.asyncio
+    async def test_fallback_to_substring_search_when_redis_unavailable(self, mocker):
+        # Redis失敗をモック
+        mocker.patch(
+            "app.services.redis.search_markets_by_vector",
+            side_effect=Exception("Redis down")
+        )
 
-    const request = new NextRequest('http://localhost/api/markets/search?q=test')
-    const response = await GET(request, {})
-    const data = await response.json()
+        async with AsyncClient(app=app, base_url="http://test") as client:
+            response = await client.get("/api/markets/search?q=test")
+            data = response.json()
 
-    expect(response.status).toBe(200)
-    expect(data.fallback).toBe(true)
-  })
-})
+            assert response.status_code == 200
+            assert data["fallback"] is True
 ```
 
 ### 3. E2Eテスト（重要なフロー用）
 Playwrightで完全なユーザージャーニーをテスト：
 
-```typescript
-import { test, expect } from '@playwright/test'
+```python
+import pytest
+from playwright.async_api import async_playwright, expect
 
-test('ユーザーはマーケットを検索して表示できる', async ({ page }) => {
-  await page.goto('/')
+@pytest.mark.asyncio
+async def test_user_can_search_and_view_market():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+        await page.goto("/")
 
-  // マーケットを検索
-  await page.fill('input[placeholder="Search markets"]', 'election')
-  await page.waitForTimeout(600) // デバウンス
+        # マーケットを検索
+        await page.fill('input[placeholder="Search markets"]', "election")
+        await page.wait_for_timeout(600)  # デバウンス
 
-  // 結果を確認
-  const results = page.locator('[data-testid="market-card"]')
-  await expect(results).toHaveCount(5, { timeout: 5000 })
+        # 結果を確認
+        results = page.locator('[data-testid="market-card"]')
+        await expect(results).to_have_count(5, timeout=5000)
 
-  // 最初の結果をクリック
-  await results.first().click()
+        # 最初の結果をクリック
+        await results.first.click()
 
-  // マーケットページが読み込まれたことを確認
-  await expect(page).toHaveURL(/\/markets\//)
-  await expect(page.locator('h1')).toBeVisible()
-})
+        # マーケットページが読み込まれたことを確認
+        await expect(page).to_have_url_matching(r"/markets/")
+        await expect(page.locator("h1")).to_be_visible()
+
+        await browser.close()
 ```
 
 ## 外部依存関係のモック
 
-### Supabaseをモック
-```typescript
-jest.mock('@/lib/supabase', () => ({
-  supabase: {
-    from: jest.fn(() => ({
-      select: jest.fn(() => ({
-        eq: jest.fn(() => Promise.resolve({
-          data: mockMarkets,
-          error: null
-        }))
-      }))
-    }))
-  }
-}))
+### SQLAlchemyをモック
+```python
+import pytest
+from unittest.mock import AsyncMock, patch
+
+@pytest.fixture
+def mock_db_session():
+    with patch("app.database.get_session") as mock:
+        session = AsyncMock()
+        mock.return_value.__aenter__.return_value = session
+        yield session
+
+@pytest.mark.asyncio
+async def test_get_markets(mock_db_session):
+    mock_db_session.execute.return_value.scalars.return_value.all.return_value = [
+        Market(id=1, name="Test Market")
+    ]
+
+    result = await get_markets()
+    assert len(result) == 1
 ```
 
 ### Redisをモック
-```typescript
-jest.mock('@/lib/redis', () => ({
-  searchMarketsByVector: jest.fn(() => Promise.resolve([
-    { slug: 'test-1', similarity_score: 0.95 },
-    { slug: 'test-2', similarity_score: 0.90 }
-  ]))
-}))
+```python
+@pytest.fixture
+def mock_redis(mocker):
+    return mocker.patch(
+        "app.services.redis.search_markets_by_vector",
+        return_value=[
+            {"slug": "test-1", "similarity_score": 0.95},
+            {"slug": "test-2", "similarity_score": 0.90}
+        ]
+    )
 ```
 
 ### OpenAIをモック
-```typescript
-jest.mock('@/lib/openai', () => ({
-  generateEmbedding: jest.fn(() => Promise.resolve(
-    new Array(1536).fill(0.1)
-  ))
-}))
+```python
+@pytest.fixture
+def mock_openai(mocker):
+    return mocker.patch(
+        "app.services.openai.generate_embedding",
+        return_value=[0.1] * 1536
+    )
 ```
 
 ## 必ずテストすべきエッジケース
 
-1. **Null/Undefined**：入力がnullの場合は？
-2. **空**：配列/文字列が空の場合は？
+1. **None/空値**：入力がNoneの場合は？
+2. **空**：リスト/文字列が空の場合は？
 3. **無効な型**：間違った型が渡された場合は？
 4. **境界**：最小/最大値
 5. **エラー**：ネットワーク失敗、データベースエラー
@@ -210,7 +233,7 @@ jest.mock('@/lib/openai', () => ({
 - [ ] すべてのパブリック関数に単体テストがある
 - [ ] すべてのAPIエンドポイントに統合テストがある
 - [ ] 重要なユーザーフローにE2Eテストがある
-- [ ] エッジケースがカバーされている（null、空、無効）
+- [ ] エッジケースがカバーされている（None、空、無効）
 - [ ] エラーパスがテストされている（ハッピーパスだけでなく）
 - [ ] 外部依存関係にモックが使用されている
 - [ ] テストが独立している（共有状態なし）
@@ -220,42 +243,49 @@ jest.mock('@/lib/openai', () => ({
 
 ## テストの臭い（アンチパターン）
 
-### ❌ 実装詳細のテスト
-```typescript
-// 内部状態をテストしない
-expect(component.state.count).toBe(5)
+### 実装詳細のテスト
+```python
+# 内部状態をテストしない
+assert component._internal_state["count"] == 5
 ```
 
-### ✅ ユーザーに見える動作をテスト
-```typescript
-// ユーザーが見るものをテスト
-expect(screen.getByText('Count: 5')).toBeInTheDocument()
+### ユーザーに見える動作をテスト
+```python
+# ユーザーが見るものをテスト
+response = await client.get("/count")
+assert response.json()["count"] == 5
 ```
 
-### ❌ テストが相互依存
-```typescript
-// 前のテストに依存しない
-test('ユーザーを作成', () => { /* ... */ })
-test('同じユーザーを更新', () => { /* 前のテストが必要 */ })
+### テストが相互依存
+```python
+# 前のテストに依存しない
+def test_create_user(): ...
+def test_update_same_user(): ...  # 前のテストが必要 - NG
 ```
 
-### ✅ 独立したテスト
-```typescript
-// 各テストでデータをセットアップ
-test('ユーザーを更新', () => {
-  const user = createTestUser()
-  // テストロジック
-})
+### 独立したテスト
+```python
+# 各テストでデータをセットアップ
+@pytest.fixture
+def test_user(db_session):
+    user = User(name="Test")
+    db_session.add(user)
+    db_session.commit()
+    return user
+
+def test_update_user(test_user):
+    # テストロジック
+    pass
 ```
 
 ## カバレッジレポート
 
 ```bash
 # カバレッジ付きでテストを実行
-npm run test:coverage
+pytest --cov=app --cov-report=html --cov-report=term-missing
 
 # HTMLレポートを表示
-open coverage/lcov-report/index.html
+open htmlcov/index.html
 ```
 
 必要な閾値：
@@ -268,13 +298,13 @@ open coverage/lcov-report/index.html
 
 ```bash
 # 開発中のウォッチモード
-npm test -- --watch
+pytest-watch
 
 # コミット前に実行（gitフック経由）
-npm test && npm run lint
+pytest && ruff check . && mypy .
 
 # CI/CD統合
-npm test -- --coverage --ci
+pytest --cov=app --cov-fail-under=80
 ```
 
 **覚えておいてください**：テストなしのコードはありません。テストはオプションではありません。テストは自信を持ったリファクタリング、迅速な開発、本番の信頼性を可能にする安全網です。

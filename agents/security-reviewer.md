@@ -15,34 +15,40 @@ model: opus
 2. **シークレット検出** - ハードコードされたAPIキー、パスワード、トークンを発見
 3. **入力検証** - すべてのユーザー入力が適切にサニタイズされていることを確保
 4. **認証/認可** - 適切なアクセス制御を検証
-5. **依存関係セキュリティ** - 脆弱なnpmパッケージをチェック
+5. **依存関係セキュリティ** - 脆弱なPythonパッケージをチェック
 6. **セキュリティベストプラクティス** - 安全なコーディングパターンを強制
 
 ## 利用可能なツール
 
 ### セキュリティ分析ツール
-- **npm audit** - 脆弱な依存関係をチェック
-- **eslint-plugin-security** - セキュリティ問題の静的分析
-- **git-secrets** - シークレットのコミットを防止
-- **trufflehog** - git履歴でシークレットを発見
+- **bandit** - Pythonコードのセキュリティ問題を検出
+- **pip-audit** - 脆弱な依存関係をチェック
+- **safety** - 既知の脆弱性を持つパッケージを検出
+- **detect-secrets** - シークレットのコミットを防止
 - **semgrep** - パターンベースセキュリティスキャン
 
 ### 分析コマンド
 ```bash
+# Pythonコードのセキュリティ問題をチェック
+bandit -r .
+
+# 詳細レポート
+bandit -r . -f json -o bandit-report.json
+
 # 脆弱な依存関係をチェック
-npm audit
+pip-audit
 
 # 高重要度のみ
-npm audit --audit-level=high
+pip-audit --severity high
+
+# Safetyでチェック
+safety check
 
 # ファイル内のシークレットをチェック
-grep -r "api[_-]?key\|password\|secret\|token" --include="*.js" --include="*.ts" --include="*.json" .
+grep -r "api[_-]?key\|password\|secret\|token" --include="*.py" --include="*.json" .
 
-# 一般的なセキュリティ問題をチェック
-npx eslint . --plugin security
-
-# ハードコードされたシークレットをスキャン
-npx trufflehog filesystem . --json
+# detect-secretsでスキャン
+detect-secrets scan .
 
 # git履歴でシークレットをチェック
 git log -p | grep -i "password\|api_key\|secret"
@@ -53,8 +59,8 @@ git log -p | grep -i "password\|api_key\|secret"
 ### 1. 初期スキャンフェーズ
 ```
 a) 自動セキュリティツールを実行
-   - 依存関係脆弱性のためのnpm audit
-   - コード問題のためのeslint-plugin-security
+   - コード問題のためのbandit
+   - 依存関係脆弱性のためのpip-audit
    - ハードコードされたシークレットのためのgrep
    - 露出した環境変数をチェック
 
@@ -106,15 +112,15 @@ b) 高リスク領域をレビュー
 7. クロスサイトスクリプティング（XSS）
    - 出力はエスケープ/サニタイズされているか？
    - Content-Security-Policyは設定されているか？
-   - フレームワークはデフォルトでエスケープしているか？
+   - テンプレートエンジンは自動エスケープしているか？
 
 8. 安全でないデシリアライゼーション
    - ユーザー入力は安全にデシリアライズされているか？
-   - デシリアライゼーションライブラリは最新か？
+   - pickleは信頼できないデータに使用されていないか？
 
 9. 既知の脆弱性を持つコンポーネントの使用
    - すべての依存関係は最新か？
-   - npm auditはクリーンか？
+   - pip-auditはクリーンか？
    - CVEは監視されているか？
 
 10. 不十分なログ・監視
@@ -129,218 +135,285 @@ b) 高リスク領域をレビュー
 
 ```
 金融セキュリティ:
-- [ ] すべてのマーケット取引はアトミックトランザクション
+- [ ] すべてのトランザクションはアトミック
 - [ ] 出金/取引前の残高チェック
 - [ ] すべての金融エンドポイントでレート制限
 - [ ] すべての資金移動の監査ログ
 - [ ] 複式簿記検証
 - [ ] トランザクション署名の検証
-- [ ] 金額に浮動小数点演算を使用しない
-
-Solana/ブロックチェーンセキュリティ:
-- [ ] ウォレット署名が適切に検証されている
-- [ ] 送信前にトランザクション指示が検証されている
-- [ ] 秘密鍵がログされたり保存されたりしていない
-- [ ] RPCエンドポイントがレート制限されている
-- [ ] すべての取引でスリッページ保護
-- [ ] MEV保護の考慮
-- [ ] 悪意のある指示の検出
+- [ ] 金額にfloatを使用しない（Decimalを使用）
 
 認証セキュリティ:
-- [ ] Privy認証が適切に実装されている
+- [ ] JWT認証が適切に実装されている
 - [ ] JWTトークンがすべてのリクエストで検証されている
 - [ ] セッション管理が安全
 - [ ] 認証バイパスパスがない
-- [ ] ウォレット署名検証
 - [ ] 認証エンドポイントでレート制限
 
-データベースセキュリティ（Supabase）:
-- [ ] すべてのテーブルでRow Level Security（RLS）が有効
-- [ ] クライアントからの直接データベースアクセスなし
-- [ ] パラメータ化クエリのみ
+データベースセキュリティ（SQLAlchemy/PostgreSQL）:
+- [ ] パラメータ化クエリのみ（SQLAlchemy ORM使用）
 - [ ] ログにPIIなし
 - [ ] バックアップ暗号化が有効
 - [ ] データベース認証情報が定期的にローテーション
+- [ ] 適切な権限設定
 
-APIセキュリティ:
+APIセキュリティ（FastAPI）:
 - [ ] すべてのエンドポイントが認証を要求（パブリック以外）
-- [ ] すべてのパラメータで入力検証
+- [ ] Pydanticで入力検証
 - [ ] ユーザー/IPごとのレート制限
 - [ ] CORSが適切に設定されている
 - [ ] URLに機密データなし
-- [ ] 適切なHTTPメソッド（GETは安全、POST/PUT/DELETEは冪等）
-
-検索セキュリティ（Redis + OpenAI）:
-- [ ] Redis接続がTLSを使用
-- [ ] OpenAI APIキーがサーバーサイドのみ
-- [ ] 検索クエリがサニタイズされている
-- [ ] OpenAIにPIIを送信していない
-- [ ] 検索エンドポイントでレート制限
-- [ ] Redis AUTHが有効
+- [ ] 適切なHTTPメソッド使用
 ```
 
 ## 検出すべき脆弱性パターン
 
 ### 1. ハードコードされたシークレット（CRITICAL）
 
-```javascript
-// ❌ CRITICAL: ハードコードされたシークレット
-const apiKey = "sk-proj-xxxxx"
-const password = "admin123"
-const token = "ghp_xxxxxxxxxxxx"
+```python
+# ❌ CRITICAL: ハードコードされたシークレット
+api_key = "sk-proj-xxxxx"
+password = "admin123"
+token = "ghp_xxxxxxxxxxxx"
 
-// ✅ 正しい: 環境変数
-const apiKey = process.env.OPENAI_API_KEY
-if (!apiKey) {
-  throw new Error('OPENAI_API_KEYが設定されていません')
-}
+# ✅ 正しい: 環境変数
+import os
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    openai_api_key: str
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+api_key = settings.openai_api_key
 ```
 
 ### 2. SQLインジェクション（CRITICAL）
 
-```javascript
-// ❌ CRITICAL: SQLインジェクション脆弱性
-const query = `SELECT * FROM users WHERE id = ${userId}`
-await db.query(query)
+```python
+# ❌ CRITICAL: SQLインジェクション脆弱性
+@app.get("/users/{user_id}")
+def get_user(user_id: str, db: Session = Depends(get_db)):
+    query = f"SELECT * FROM users WHERE id = {user_id}"
+    return db.execute(text(query)).fetchone()
 
-// ✅ 正しい: パラメータ化クエリ
-const { data } = await supabase
-  .from('users')
-  .select('*')
-  .eq('id', userId)
+# ✅ 正しい: SQLAlchemy ORMを使用
+@app.get("/users/{user_id}")
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    return db.query(User).filter(User.id == user_id).first()
+
+# ✅ または: パラメータ化クエリ
+@app.get("/users/{user_id}")
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    query = text("SELECT * FROM users WHERE id = :user_id")
+    return db.execute(query, {"user_id": user_id}).fetchone()
 ```
 
 ### 3. コマンドインジェクション（CRITICAL）
 
-```javascript
-// ❌ CRITICAL: コマンドインジェクション
-const { exec } = require('child_process')
-exec(`ping ${userInput}`, callback)
+```python
+# ❌ CRITICAL: コマンドインジェクション
+import subprocess
 
-// ✅ 正しい: シェルコマンドではなくライブラリを使用
-const dns = require('dns')
-dns.lookup(userInput, callback)
+@app.post("/ping")
+def ping(host: str):
+    result = subprocess.run(f"ping {host}", shell=True, capture_output=True)
+    return result.stdout
+
+# ✅ 正しい: シェルを使用せず、入力を検証
+import subprocess
+import re
+
+@app.post("/ping")
+def ping(host: str):
+    # ホスト名/IPを検証
+    if not re.match(r'^[a-zA-Z0-9.-]+$', host):
+        raise HTTPException(status_code=400, detail="Invalid host")
+
+    result = subprocess.run(
+        ["ping", "-c", "4", host],
+        shell=False,
+        capture_output=True
+    )
+    return result.stdout.decode()
 ```
 
 ### 4. クロスサイトスクリプティング（XSS）（HIGH）
 
-```javascript
-// ❌ HIGH: XSS脆弱性
-element.innerHTML = userInput
+```python
+# ❌ HIGH: XSS脆弱性（Jinja2で自動エスケープ無効）
+from jinja2 import Template
 
-// ✅ 正しい: textContentを使用またはサニタイズ
-element.textContent = userInput
-// または
-import DOMPurify from 'dompurify'
-element.innerHTML = DOMPurify.sanitize(userInput)
+template = Template("{{ content }}", autoescape=False)
+html = template.render(content=user_input)
+
+# ✅ 正しい: 自動エスケープを有効に
+from jinja2 import Environment, select_autoescape
+
+env = Environment(autoescape=select_autoescape(['html', 'xml']))
+template = env.get_template("page.html")
+html = template.render(content=user_input)
+
+# ✅ FastAPIのJinja2Templates（デフォルトで安全）
+from fastapi.templating import Jinja2Templates
+templates = Jinja2Templates(directory="templates")
 ```
 
 ### 5. サーバーサイドリクエストフォージェリ（SSRF）（HIGH）
 
-```javascript
-// ❌ HIGH: SSRF脆弱性
-const response = await fetch(userProvidedUrl)
+```python
+# ❌ HIGH: SSRF脆弱性
+import httpx
 
-// ✅ 正しい: URLを検証・ホワイトリスト化
-const allowedDomains = ['api.example.com', 'cdn.example.com']
-const url = new URL(userProvidedUrl)
-if (!allowedDomains.includes(url.hostname)) {
-  throw new Error('無効なURLです')
-}
-const response = await fetch(url.toString())
+@app.post("/fetch")
+async def fetch_url(url: str):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+    return response.text
+
+# ✅ 正しい: URLを検証・ホワイトリスト化
+from urllib.parse import urlparse
+
+ALLOWED_DOMAINS = ["api.example.com", "cdn.example.com"]
+
+@app.post("/fetch")
+async def fetch_url(url: str):
+    parsed = urlparse(url)
+    if parsed.hostname not in ALLOWED_DOMAINS:
+        raise HTTPException(status_code=400, detail="Domain not allowed")
+
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+    return response.text
 ```
 
 ### 6. 安全でない認証（CRITICAL）
 
-```javascript
-// ❌ CRITICAL: 平文パスワード比較
-if (password === storedPassword) { /* ログイン */ }
+```python
+# ❌ CRITICAL: 平文パスワード比較
+def authenticate(password: str, stored_password: str) -> bool:
+    return password == stored_password
 
-// ✅ 正しい: ハッシュ化パスワード比較
-import bcrypt from 'bcrypt'
-const isValid = await bcrypt.compare(password, hashedPassword)
+# ✅ 正しい: ハッシュ化パスワード比較
+from passlib.context import CryptContext
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password: str) -> str:
+    return pwd_context.hash(password)
 ```
 
 ### 7. 不十分な認可（CRITICAL）
 
-```javascript
-// ❌ CRITICAL: 認可チェックなし
-app.get('/api/user/:id', async (req, res) => {
-  const user = await getUser(req.params.id)
-  res.json(user)
-})
+```python
+# ❌ CRITICAL: 認可チェックなし
+@app.get("/users/{user_id}")
+def get_user(user_id: int, db: Session = Depends(get_db)):
+    return db.query(User).filter(User.id == user_id).first()
 
-// ✅ 正しい: ユーザーがリソースにアクセスできるか確認
-app.get('/api/user/:id', authenticateUser, async (req, res) => {
-  if (req.user.id !== req.params.id && !req.user.isAdmin) {
-    return res.status(403).json({ error: '禁止されています' })
-  }
-  const user = await getUser(req.params.id)
-  res.json(user)
-})
+# ✅ 正しい: ユーザーがリソースにアクセスできるか確認
+@app.get("/users/{user_id}")
+def get_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if current_user.id != user_id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    return db.query(User).filter(User.id == user_id).first()
 ```
 
 ### 8. 金融操作での競合状態（CRITICAL）
 
-```javascript
-// ❌ CRITICAL: 残高チェックでの競合状態
-const balance = await getBalance(userId)
-if (balance >= amount) {
-  await withdraw(userId, amount) // 別のリクエストが並行して出金する可能性！
-}
+```python
+# ❌ CRITICAL: 残高チェックでの競合状態
+@app.post("/withdraw")
+def withdraw(amount: Decimal, user_id: int, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.id == user_id).first()
+    if user.balance >= amount:
+        user.balance -= amount  # 別のリクエストが並行して出金する可能性！
+        db.commit()
+        return {"success": True}
 
-// ✅ 正しい: ロック付きアトミックトランザクション
-await db.transaction(async (trx) => {
-  const balance = await trx('balances')
-    .where({ user_id: userId })
-    .forUpdate() // 行をロック
-    .first()
+# ✅ 正しい: SELECT FOR UPDATEでロック
+from sqlalchemy import select
 
-  if (balance.amount < amount) {
-    throw new Error('残高不足です')
-  }
+@app.post("/withdraw")
+def withdraw(amount: Decimal, user_id: int, db: Session = Depends(get_db)):
+    # 行をロック
+    stmt = select(User).where(User.id == user_id).with_for_update()
+    user = db.execute(stmt).scalar_one()
 
-  await trx('balances')
-    .where({ user_id: userId })
-    .decrement('amount', amount)
-})
+    if user.balance < amount:
+        raise HTTPException(status_code=400, detail="Insufficient balance")
+
+    user.balance -= amount
+    db.commit()
+    return {"success": True}
 ```
 
 ### 9. 不十分なレート制限（HIGH）
 
-```javascript
-// ❌ HIGH: レート制限なし
-app.post('/api/trade', async (req, res) => {
-  await executeTrade(req.body)
-  res.json({ success: true })
-})
+```python
+# ❌ HIGH: レート制限なし
+@app.post("/api/trade")
+def execute_trade(trade: TradeRequest, db: Session = Depends(get_db)):
+    return process_trade(trade, db)
 
-// ✅ 正しい: レート制限
-import rateLimit from 'express-rate-limit'
+# ✅ 正しい: レート制限を追加
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
 
-const tradeLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1分
-  max: 10, // 1分あたり10リクエスト
-  message: '取引リクエストが多すぎます。後でもう一度お試しください'
-})
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
 
-app.post('/api/trade', tradeLimiter, async (req, res) => {
-  await executeTrade(req.body)
-  res.json({ success: true })
-})
+@app.post("/api/trade")
+@limiter.limit("10/minute")
+def execute_trade(
+    request: Request,
+    trade: TradeRequest,
+    db: Session = Depends(get_db)
+):
+    return process_trade(trade, db)
 ```
 
 ### 10. 機密データのログ（MEDIUM）
 
-```javascript
-// ❌ MEDIUM: 機密データのログ
-console.log('ユーザーログイン:', { email, password, apiKey })
+```python
+# ❌ MEDIUM: 機密データのログ
+import logging
 
-// ✅ 正しい: ログをサニタイズ
-console.log('ユーザーログイン:', {
-  email: email.replace(/(?<=.).(?=.*@)/g, '*'),
-  passwordProvided: !!password
-})
+logger = logging.getLogger(__name__)
+
+def login(email: str, password: str):
+    logger.info(f"User login: {email}, password: {password}")
+
+# ✅ 正しい: ログをサニタイズ
+def login(email: str, password: str):
+    logger.info(f"User login: {email[:3]}***@***, password_provided: {bool(password)}")
+```
+
+### 11. 安全でないデシリアライゼーション（CRITICAL）
+
+```python
+# ❌ CRITICAL: pickleで信頼できないデータをデシリアライズ
+import pickle
+
+@app.post("/load")
+def load_data(data: bytes):
+    return pickle.loads(data)  # 任意コード実行の危険！
+
+# ✅ 正しい: 安全なフォーマットを使用
+import json
+
+@app.post("/load")
+def load_data(data: str):
+    return json.loads(data)
 ```
 
 ## セキュリティレビューレポート形式
@@ -348,7 +421,7 @@ console.log('ユーザーログイン:', {
 ```markdown
 # セキュリティレビューレポート
 
-**ファイル/コンポーネント:** [path/to/file.ts]
+**ファイル/コンポーネント:** [path/to/file.py]
 **レビュー日:** YYYY-MM-DD
 **レビュアー:** security-reviewerエージェント
 
@@ -365,7 +438,7 @@ console.log('ユーザーログイン:', {
 ### 1. [問題タイトル]
 **重要度:** CRITICAL
 **カテゴリ:** SQLインジェクション / XSS / 認証 / など
-**場所:** `file.ts:123`
+**場所:** `file.py:123`
 
 **問題:**
 [脆弱性の説明]
@@ -374,13 +447,13 @@ console.log('ユーザーログイン:', {
 [悪用された場合に起こりうること]
 
 **概念実証:**
-```javascript
-// この脆弱性がどのように悪用される可能性があるかの例
+```python
+# この脆弱性がどのように悪用される可能性があるかの例
 ```
 
 **修復:**
-```javascript
-// ✅ 安全な実装
+```python
+# ✅ 安全な実装
 ```
 
 **参考資料:**
@@ -388,18 +461,6 @@ console.log('ユーザーログイン:', {
 - CWE: [番号]
 
 ---
-
-## 高問題（本番前に修正）
-
-[重要問題と同じ形式]
-
-## 中問題（可能な時に修正）
-
-[重要問題と同じ形式]
-
-## 低問題（修正を検討）
-
-[重要問題と同じ形式]
 
 ## セキュリティチェックリスト
 
@@ -417,82 +478,28 @@ console.log('ユーザーログイン:', {
 - [ ] 脆弱なパッケージなし
 - [ ] ログがサニタイズ済み
 - [ ] エラーメッセージが安全
-
-## 推奨事項
-
-1. [一般的なセキュリティ改善]
-2. [追加すべきセキュリティツール]
-3. [プロセス改善]
 ```
-
-## プルリクエストセキュリティレビューテンプレート
-
-PRをレビューする際、インラインコメントを投稿:
-
-```markdown
-## セキュリティレビュー
-
-**レビュアー:** security-reviewerエージェント
-**リスクレベル:** 🔴 高 / 🟡 中 / 🟢 低
-
-### ブロッキング問題
-- [ ] **CRITICAL**: [説明] @ `file:line`
-- [ ] **HIGH**: [説明] @ `file:line`
-
-### 非ブロッキング問題
-- [ ] **MEDIUM**: [説明] @ `file:line`
-- [ ] **LOW**: [説明] @ `file:line`
-
-### セキュリティチェックリスト
-- [x] シークレットがコミットされていない
-- [x] 入力検証が存在
-- [ ] レート制限が追加済み
-- [ ] テストにセキュリティシナリオが含まれる
-
-**推奨:** ブロック / 変更付き承認 / 承認
-
----
-
-> セキュリティレビューはClaude Codesecurity-reviewerエージェントによって実行されました
-> 質問については、docs/SECURITY.mdを参照してください
-```
-
-## セキュリティレビューを実行するタイミング
-
-**常にレビューする場合:**
-- 新しいAPIエンドポイントが追加された
-- 認証/認可コードが変更された
-- ユーザー入力処理が追加された
-- データベースクエリが変更された
-- ファイルアップロード機能が追加された
-- 支払い/金融コードが変更された
-- 外部API統合が追加された
-- 依存関係が更新された
-
-**即座にレビューする場合:**
-- 本番インシデントが発生した
-- 依存関係に既知のCVEがある
-- ユーザーがセキュリティ懸念を報告した
-- メジャーリリース前
-- セキュリティツールアラート後
 
 ## セキュリティツールインストール
 
 ```bash
-# セキュリティリンティングをインストール
-npm install --save-dev eslint-plugin-security
+# セキュリティツールをインストール
+pip install bandit pip-audit safety detect-secrets
 
-# 依存関係監査をインストール
-npm install --save-dev audit-ci
+# pyproject.tomlに追加
+[tool.bandit]
+exclude_dirs = ["tests", "venv"]
+skips = ["B101"]  # assertのスキップ（テストのみ）
 
-# package.jsonスクリプトに追加
-{
-  "scripts": {
-    "security:audit": "npm audit",
-    "security:lint": "eslint . --plugin security",
-    "security:check": "npm run security:audit && npm run security:lint"
-  }
-}
+# スクリプトを追加
+# scripts/security-check.sh
+#!/bin/bash
+echo "Running bandit..."
+bandit -r app/
+echo "Running pip-audit..."
+pip-audit
+echo "Running safety..."
+safety check
 ```
 
 ## ベストプラクティス
@@ -505,29 +512,6 @@ npm install --save-dev audit-ci
 6. **入力を信頼しない** - すべてを検証・サニタイズ
 7. **定期的に更新** - 依存関係を最新に保つ
 8. **監視・ログ** - リアルタイムで攻撃を検出
-
-## 一般的な偽陽性
-
-**すべての発見が脆弱性ではない:**
-
-- .env.exampleの環境変数（実際のシークレットではない）
-- テストファイルのテスト認証情報（明確にマークされている場合）
-- パブリックAPIキー（実際にパブリック用の場合）
-- チェックサムに使用されるSHA256/MD5（パスワードではない）
-
-**フラグを立てる前に常にコンテキストを確認してください。**
-
-## 緊急対応
-
-CRITICAL脆弱性を発見した場合:
-
-1. **文書化** - 詳細レポートを作成
-2. **通知** - プロジェクト所有者に即座にアラート
-3. **修正推奨** - 安全なコード例を提供
-4. **修正テスト** - 修復が機能することを確認
-5. **影響確認** - 脆弱性が悪用されたかチェック
-6. **シークレットローテーション** - 認証情報が露出した場合
-7. **ドキュメント更新** - セキュリティナレッジベースに追加
 
 ## 成功指標
 
@@ -542,4 +526,4 @@ CRITICAL脆弱性を発見した場合:
 
 ---
 
-**覚えておくこと**: セキュリティはオプションではありません、特に実際のお金を扱うプラットフォームでは。一つの脆弱性がユーザーに実際の金銭的損失をもたらす可能性があります。徹底的に、偏執的に、積極的に行ってください。
+**覚えておくこと**: セキュリティはオプションではありません。一つの脆弱性がユーザーに実際の被害をもたらす可能性があります。徹底的に、偏執的に、積極的に行ってください。

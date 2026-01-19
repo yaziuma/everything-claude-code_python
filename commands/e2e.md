@@ -1,17 +1,17 @@
 ---
-description: Playwrightでエンドツーエンドテストを生成・実行。テストジャーニーを作成し、テストを実行し、スクリーンショット/動画/トレースをキャプチャし、アーティファクトをアップロード。
+description: pytest-playwrightでエンドツーエンドテストを生成・実行。テストジャーニーを作成し、テストを実行し、スクリーンショット/動画/トレースをキャプチャ。
 ---
 
 # E2Eコマンド
 
-このコマンドは**e2e-runner**エージェントを呼び出して、Playwrightを使用してエンドツーエンドテストを生成、維持、実行します。
+このコマンドは**e2e-runner**エージェントを呼び出して、pytest-playwrightを使用してエンドツーエンドテストを生成、維持、実行します。
 
 ## このコマンドが行うこと
 
 1. **テストジャーニー生成** - ユーザーフロー用のPlaywrightテストを作成
 2. **E2Eテスト実行** - ブラウザ間でテストを実行
 3. **アーティファクトキャプチャ** - 失敗時のスクリーンショット、動画、トレース
-4. **結果アップロード** - HTMLレポートとJUnit XML
+4. **結果生成** - HTMLレポートとJUnit XML
 5. **不安定テスト特定** - 不安定なテストを隔離
 
 ## 使用タイミング
@@ -22,17 +22,6 @@ description: Playwrightでエンドツーエンドテストを生成・実行。
 - UIインタラクションとナビゲーションのテスト
 - フロントエンドとバックエンド間の統合検証
 - 本番デプロイメントの準備
-
-## 動作方法
-
-e2e-runnerエージェントは以下を行います:
-
-1. **ユーザーフローを分析**してテストシナリオを特定
-2. **Playwrightテストを生成**（Page Object Modelパターン使用）
-3. **複数ブラウザでテストを実行**（Chrome、Firefox、Safari）
-4. **失敗をキャプチャ**（スクリーンショット、動画、トレース付き）
-5. **結果とアーティファクト付きレポートを生成**
-6. **不安定テストを特定**して修正を推奨
 
 ## 使用例
 
@@ -46,261 +35,217 @@ e2e-runnerエージェントは以下を行います:
 
 **ユーザージャーニー:** マーケット検索 → 結果表示 → マーケットクリック → 詳細表示
 
-**テストカバレッジ:**
-1. マーケットページに移動
-2. セマンティック検索を実行
-3. 検索結果を確認
-4. 最初の結果をクリック
-5. マーケット詳細ページの読み込みを確認
-6. チャートのレンダリングを確認
-
 ## 生成されたテストコード
 
-```typescript
-// tests/e2e/markets/search-and-view.spec.ts
-import { test, expect } from '@playwright/test'
-import { MarketsPage } from '../../pages/MarketsPage'
-import { MarketDetailsPage } from '../../pages/MarketDetailsPage'
+```python
+# tests/e2e/test_market_search.py
+import pytest
+from playwright.sync_api import Page, expect
 
-test.describe('マーケット検索と表示フロー', () => {
-  test('ユーザーはマーケットを検索して詳細を表示できる', async ({ page }) => {
-    // 1. マーケットページに移動
-    const marketsPage = new MarketsPage(page)
-    await marketsPage.goto()
+class TestMarketSearchFlow:
+    """マーケット検索と表示フローのE2Eテスト"""
 
-    // ページ読み込みを確認
-    await expect(page).toHaveTitle(/Markets/)
-    await expect(page.locator('h1')).toContainText('Markets')
+    def test_user_can_search_and_view_market(self, page: Page):
+        """ユーザーはマーケットを検索して詳細を表示できる"""
+        # 1. マーケットページに移動
+        page.goto("/markets")
 
-    // 2. セマンティック検索を実行
-    await marketsPage.searchMarkets('election')
+        # ページ読み込みを確認
+        expect(page).to_have_title("Markets")
+        expect(page.locator("h1")).to_contain_text("Markets")
 
-    // APIレスポンスを待機
-    await page.waitForResponse(resp =>
-      resp.url().includes('/api/markets/search') && resp.status() === 200
-    )
+        # 2. 検索を実行
+        search_input = page.locator('[data-testid="search-input"]')
+        search_input.fill("election")
+        search_input.press("Enter")
 
-    // 3. 検索結果を確認
-    const marketCards = marketsPage.marketCards
-    await expect(marketCards.first()).toBeVisible()
-    const resultCount = await marketCards.count()
-    expect(resultCount).toBeGreaterThan(0)
+        # APIレスポンスを待機
+        page.wait_for_response(
+            lambda resp: "/api/markets/search" in resp.url and resp.status == 200
+        )
 
-    // 検索結果のスクリーンショットを撮影
-    await page.screenshot({ path: 'artifacts/search-results.png' })
+        # 3. 検索結果を確認
+        market_cards = page.locator('[data-testid="market-card"]')
+        expect(market_cards.first).to_be_visible()
+        assert market_cards.count() > 0
 
-    // 4. 最初の結果をクリック
-    const firstMarketTitle = await marketCards.first().textContent()
-    await marketCards.first().click()
+        # スクリーンショットを撮影
+        page.screenshot(path="artifacts/search-results.png")
 
-    // 5. マーケット詳細ページの読み込みを確認
-    await expect(page).toHaveURL(/\/markets\/[a-z0-9-]+/)
+        # 4. 最初の結果をクリック
+        first_title = market_cards.first.text_content()
+        market_cards.first.click()
 
-    const detailsPage = new MarketDetailsPage(page)
-    await expect(detailsPage.marketName).toBeVisible()
-    await expect(detailsPage.marketDescription).toBeVisible()
+        # 5. マーケット詳細ページの読み込みを確認
+        expect(page).to_have_url(re.compile(r"/markets/[\w-]+"))
 
-    // 6. チャートのレンダリングを確認
-    await expect(detailsPage.priceChart).toBeVisible()
+        # 詳細要素を確認
+        expect(page.locator('[data-testid="market-name"]')).to_be_visible()
+        expect(page.locator('[data-testid="market-description"]')).to_be_visible()
 
-    // マーケット名の一致を確認
-    const detailsTitle = await detailsPage.marketName.textContent()
-    expect(detailsTitle?.toLowerCase()).toContain(
-      firstMarketTitle?.toLowerCase().substring(0, 20) || ''
-    )
+        # 6. チャートのレンダリングを確認
+        expect(page.locator('[data-testid="price-chart"]')).to_be_visible()
 
-    // マーケット詳細のスクリーンショットを撮影
-    await page.screenshot({ path: 'artifacts/market-details.png' })
-  })
+        # マーケット詳細のスクリーンショット
+        page.screenshot(path="artifacts/market-details.png")
 
-  test('結果なしの検索で空状態を表示', async ({ page }) => {
-    const marketsPage = new MarketsPage(page)
-    await marketsPage.goto()
+    def test_empty_search_shows_no_results(self, page: Page):
+        """結果なしの検索で空状態を表示"""
+        page.goto("/markets")
 
-    // 存在しないマーケットを検索
-    await marketsPage.searchMarkets('xyznonexistentmarket123456')
+        search_input = page.locator('[data-testid="search-input"]')
+        search_input.fill("xyznonexistentmarket123456")
+        search_input.press("Enter")
 
-    // 空状態を確認
-    await expect(page.locator('[data-testid="no-results"]')).toBeVisible()
-    await expect(page.locator('[data-testid="no-results"]')).toContainText(
-      /no.*results|no.*markets/i
-    )
+        # 空状態を確認
+        no_results = page.locator('[data-testid="no-results"]')
+        expect(no_results).to_be_visible()
+        expect(no_results).to_contain_text("結果が見つかりません")
 
-    const marketCount = await marketsPage.marketCards.count()
-    expect(marketCount).toBe(0)
-  })
+    def test_clear_search_shows_all_markets(self, page: Page):
+        """検索をクリアして再度すべてのマーケットを表示"""
+        page.goto("/markets")
 
-  test('検索をクリアして再度すべてのマーケットを表示', async ({ page }) => {
-    const marketsPage = new MarketsPage(page)
-    await marketsPage.goto()
+        market_cards = page.locator('[data-testid="market-card"]')
+        initial_count = market_cards.count()
 
-    // 初期マーケット数
-    const initialCount = await marketsPage.marketCards.count()
+        # 検索を実行
+        search_input = page.locator('[data-testid="search-input"]')
+        search_input.fill("trump")
+        search_input.press("Enter")
+        page.wait_for_load_state("networkidle")
 
-    // 検索を実行
-    await marketsPage.searchMarkets('trump')
-    await page.waitForLoadState('networkidle')
+        # フィルタされた結果を確認
+        filtered_count = market_cards.count()
+        assert filtered_count < initial_count
 
-    // フィルタされた結果を確認
-    const filteredCount = await marketsPage.marketCards.count()
-    expect(filteredCount).toBeLessThan(initialCount)
+        # 検索をクリア
+        search_input.clear()
+        search_input.press("Enter")
+        page.wait_for_load_state("networkidle")
 
-    // 検索をクリア
-    await marketsPage.searchInput.clear()
-    await page.waitForLoadState('networkidle')
-
-    // すべてのマーケットが再度表示されることを確認
-    const finalCount = await marketsPage.marketCards.count()
-    expect(finalCount).toBe(initialCount)
-  })
-})
+        # すべてのマーケットが再度表示
+        final_count = market_cards.count()
+        assert final_count == initial_count
 ```
 
 ## テスト実行
 
 ```bash
 # 生成されたテストを実行
-npx playwright test tests/e2e/markets/search-and-view.spec.ts
+pytest tests/e2e/test_market_search.py -v
 
-3ワーカーを使用して3テストを実行中
+tests/e2e/test_market_search.py::TestMarketSearchFlow::test_user_can_search_and_view_market PASSED
+tests/e2e/test_market_search.py::TestMarketSearchFlow::test_empty_search_shows_no_results PASSED
+tests/e2e/test_market_search.py::TestMarketSearchFlow::test_clear_search_shows_all_markets PASSED
 
-  ✓  [chromium] › search-and-view.spec.ts:5:3 › ユーザーはマーケットを検索して詳細を表示できる (4.2s)
-  ✓  [chromium] › search-and-view.spec.ts:52:3 › 結果なしの検索で空状態を表示 (1.8s)
-  ✓  [chromium] › search-and-view.spec.ts:67:3 › 検索をクリアして再度すべてのマーケットを表示 (2.9s)
-
-  3通過 (9.1s)
+3 passed in 9.1s
 
 生成されたアーティファクト:
 - artifacts/search-results.png
 - artifacts/market-details.png
-- playwright-report/index.html
-```
-
-## テストレポート
-
-```
-╔══════════════════════════════════════════════════════════════╗
-║                    E2Eテスト結果                             ║
-╠══════════════════════════════════════════════════════════════╣
-║ ステータス:  ✅ すべてのテスト通過                            ║
-║ 合計:       3テスト                                          ║
-║ 通過:       3 (100%)                                         ║
-║ 失敗:       0                                                ║
-║ 不安定:     0                                                ║
-║ 実行時間:   9.1s                                             ║
-╚══════════════════════════════════════════════════════════════╝
-
-アーティファクト:
-📸 スクリーンショット: 2ファイル
-📹 動画: 0ファイル（失敗時のみ）
-🔍 トレース: 0ファイル（失敗時のみ）
-📊 HTMLレポート: playwright-report/index.html
-
-レポート表示: npx playwright show-report
 ```
 
 ✅ E2EテストスイートがCI/CD統合準備完了！
 ```
 
-## テストアーティファクト
+## Page Object Model
 
-テスト実行時に以下のアーティファクトがキャプチャされます:
+```python
+# tests/e2e/pages/markets_page.py
+from playwright.sync_api import Page, Locator
 
-**すべてのテストで:**
-- タイムラインと結果付きHTMLレポート
-- CI統合用JUnit XML
+class MarketsPage:
+    """マーケットページのPage Object"""
 
-**失敗時のみ:**
-- 失敗状態のスクリーンショット
-- テストの動画録画
-- デバッグ用トレースファイル（ステップバイステップ再生）
-- ネットワークログ
-- コンソールログ
+    def __init__(self, page: Page):
+        self.page = page
+        self.search_input = page.locator('[data-testid="search-input"]')
+        self.market_cards = page.locator('[data-testid="market-card"]')
+        self.no_results = page.locator('[data-testid="no-results"]')
 
-## アーティファクト表示
+    def goto(self):
+        """マーケットページに移動"""
+        self.page.goto("/markets")
+
+    def search(self, query: str):
+        """マーケットを検索"""
+        self.search_input.fill(query)
+        self.search_input.press("Enter")
+        self.page.wait_for_load_state("networkidle")
+
+    def get_market_count(self) -> int:
+        """表示されているマーケット数を取得"""
+        return self.market_cards.count()
+
+    def click_first_market(self):
+        """最初のマーケットをクリック"""
+        self.market_cards.first.click()
+```
+
+## conftest.py設定
+
+```python
+# tests/e2e/conftest.py
+import pytest
+from playwright.sync_api import Page
+
+@pytest.fixture(scope="session")
+def browser_context_args(browser_context_args):
+    """ブラウザコンテキスト設定"""
+    return {
+        **browser_context_args,
+        "viewport": {"width": 1280, "height": 720},
+        "record_video_dir": "artifacts/videos",
+    }
+
+@pytest.fixture
+def page(page: Page):
+    """ページフィクスチャ（ベースURL設定）"""
+    page.goto("http://localhost:8000")
+    yield page
+```
+
+## クイックコマンド
 
 ```bash
-# ブラウザでHTMLレポートを表示
-npx playwright show-report
+# すべてのE2Eテストを実行
+pytest tests/e2e/ -v
 
-# 特定のトレースファイルを表示
-npx playwright show-trace artifacts/trace-abc123.zip
+# ヘッドモードで実行（ブラウザを表示）
+pytest tests/e2e/ --headed
 
-# スクリーンショットはartifacts/ディレクトリに保存
-open artifacts/search-results.png
+# 特定のブラウザで実行
+pytest tests/e2e/ --browser chromium
+pytest tests/e2e/ --browser firefox
+pytest tests/e2e/ --browser webkit
+
+# テストをデバッグ
+PWDEBUG=1 pytest tests/e2e/test_login.py -v
+
+# トレースを有効化
+pytest tests/e2e/ --tracing on
+
+# スクリーンショットを撮影（失敗時のみ）
+pytest tests/e2e/ --screenshot only-on-failure
+
+# HTMLレポート生成
+pytest tests/e2e/ --html=report.html
+
+# 並列実行
+pytest tests/e2e/ -n auto
 ```
 
-## 不安定テスト検出
+## pytest.ini設定
 
-テストが断続的に失敗する場合:
-
+```ini
+[pytest]
+addopts = -v --tb=short
+testpaths = tests/e2e
+markers =
+    slow: marks tests as slow
+    critical: marks tests as critical (must pass)
 ```
-⚠️  不安定テスト検出: tests/e2e/markets/trade.spec.ts
-
-テストは10回中7回通過（70%通過率）
-
-一般的な失敗:
-"要素'[data-testid="confirm-btn"]'の待機タイムアウト"
-
-推奨修正:
-1. 明示的待機を追加: await page.waitForSelector('[data-testid="confirm-btn"]')
-2. タイムアウトを増加: { timeout: 10000 }
-3. コンポーネントの競合状態をチェック
-4. 要素がアニメーションで隠されていないか確認
-
-隔離推奨: 修正まではtest.fixme()でマーク
-```
-
-## ブラウザ設定
-
-テストはデフォルトで複数ブラウザで実行:
-- ✅ Chromium（デスクトップChrome）
-- ✅ Firefox（デスクトップ）
-- ✅ WebKit（デスクトップSafari）
-- ✅ Mobile Chrome（オプション）
-
-ブラウザを調整するには`playwright.config.ts`で設定。
-
-## CI/CD統合
-
-CIパイプラインに追加:
-
-```yaml
-# .github/workflows/e2e.yml
-- name: Playwrightをインストール
-  run: npx playwright install --with-deps
-
-- name: E2Eテストを実行
-  run: npx playwright test
-
-- name: アーティファクトをアップロード
-  if: always()
-  uses: actions/upload-artifact@v3
-  with:
-    name: playwright-report
-    path: playwright-report/
-```
-
-## PMX固有の重要フロー
-
-PMXでは以下のE2Eテストを優先:
-
-**🔴 重要（常に通過必須）:**
-1. ユーザーはウォレットを接続できる
-2. ユーザーはマーケットを閲覧できる
-3. ユーザーはマーケットを検索できる（セマンティック検索）
-4. ユーザーはマーケット詳細を表示できる
-5. ユーザーは取引を行える（テスト資金で）
-6. マーケットは正しく解決される
-7. ユーザーは資金を引き出せる
-
-**🟡 重要:**
-1. マーケット作成フロー
-2. ユーザープロフィール更新
-3. リアルタイム価格更新
-4. チャートレンダリング
-5. マーケットのフィルタとソート
-6. モバイルレスポンシブレイアウト
 
 ## ベストプラクティス
 
@@ -317,47 +262,9 @@ PMXでは以下のE2Eテストを優先:
 - ❌ 実装詳細をテスト
 - ❌ 本番環境でテストを実行
 - ❌ 不安定テストを無視
-- ❌ 失敗時のアーティファクトレビューをスキップ
 - ❌ すべてのエッジケースをE2Eでテスト（ユニットテストを使用）
-
-## 重要な注意事項
-
-**PMXにとって重要:**
-- 実際のお金を含むE2Eテストはtestnet/stagingでのみ実行必須
-- 本番環境で取引テストを実行しない
-- 金融テストには`test.skip(process.env.NODE_ENV === 'production')`を設定
-- 少額のテスト資金のみでテストウォレットを使用
-
-## 他のコマンドとの統合
-
-- テストする重要なジャーニーを特定するために`/plan`を使用
-- ユニットテスト（より高速、より詳細）には`/tdd`を使用
-- 統合とユーザージャーニーテストには`/e2e`を使用
-- テスト品質を確認するために`/code-review`を使用
 
 ## 関連エージェント
 
 このコマンドは以下にある`e2e-runner`エージェントを呼び出します:
 `~/.claude/agents/e2e-runner.md`
-
-## クイックコマンド
-
-```bash
-# すべてのE2Eテストを実行
-npx playwright test
-
-# 特定のテストファイルを実行
-npx playwright test tests/e2e/markets/search.spec.ts
-
-# ヘッドモードで実行（ブラウザを表示）
-npx playwright test --headed
-
-# テストをデバッグ
-npx playwright test --debug
-
-# テストコードを生成
-npx playwright codegen http://localhost:3000
-
-# レポートを表示
-npx playwright show-report
-```
