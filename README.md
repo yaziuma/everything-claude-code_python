@@ -1,3 +1,9 @@
+これはForkされたリポジトリです。
+
+私が標準で利用している、Python + htmxに最適化されたリポジトリを作る予定です。
+
+下記にオリジナルのREADMEを示します。
+
 # Everything Claude Code
 
 **Anthropicハッカソン優勝者による、Claude Codeの完全なコンフィグ集**
