@@ -1,18 +1,18 @@
-# Environment files
+# 環境ファイル
 .env
 .env.local
 .env.*.local
 
-# API keys
+# APIキー
 *.key
 *.pem
 secrets.json
 
-# OS files
+# OSファイル
 .DS_Store
 Thumbs.db
 
-# Editor files
+# エディタファイル
 .idea/
 .vscode/
 *.swp
@@ -21,6 +21,7 @@ Thumbs.db
 # Node
 node_modules/
 
-# Personal configs (if any)
+# 個人設定（もしあれば）
 personal/
 private/
+*.Identifier

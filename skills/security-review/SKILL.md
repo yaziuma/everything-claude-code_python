@@ -1,64 +1,64 @@
 ---
 name: security-review
-description: Use this skill when adding authentication, handling user input, working with secrets, creating API endpoints, or implementing payment/sensitive features. Provides comprehensive security checklist and patterns.
+description: 認証の追加、ユーザー入力の処理、シークレットの取り扱い、APIエンドポイントの作成、支払い/機密機能の実装時にこのスキルを使用。包括的なセキュリティチェックリストとパターンを提供。
 ---
 
-# Security Review Skill
+# セキュリティレビュースキル
 
-This skill ensures all code follows security best practices and identifies potential vulnerabilities.
+このスキルは、すべてのコードがセキュリティベストプラクティスに従い、潜在的な脆弱性を特定することを確保します。
 
-## When to Activate
+## 有効化タイミング
 
-- Implementing authentication or authorization
-- Handling user input or file uploads
-- Creating new API endpoints
-- Working with secrets or credentials
-- Implementing payment features
-- Storing or transmitting sensitive data
-- Integrating third-party APIs
+- 認証または認可の実装
+- ユーザー入力またはファイルアップロードの処理
+- 新しいAPIエンドポイントの作成
+- シークレットまたは認証情報の取り扱い
+- 支払い機能の実装
+- 機密データの保存または送信
+- サードパーティAPIの統合
 
-## Security Checklist
+## セキュリティチェックリスト
 
-### 1. Secrets Management
+### 1. シークレット管理
 
-#### ❌ NEVER Do This
+#### ❌ 絶対にしてはいけないこと
 ```typescript
-const apiKey = "sk-proj-xxxxx"  // Hardcoded secret
-const dbPassword = "password123" // In source code
+const apiKey = "sk-proj-xxxxx"  // ハードコードされたシークレット
+const dbPassword = "password123" // ソースコード内
 ```
 
-#### ✅ ALWAYS Do This
+#### ✅ 常にすべきこと
 ```typescript
 const apiKey = process.env.OPENAI_API_KEY
 const dbUrl = process.env.DATABASE_URL
 
-// Verify secrets exist
+// シークレットが存在することを確認
 if (!apiKey) {
-  throw new Error('OPENAI_API_KEY not configured')
+  throw new Error('OPENAI_API_KEYが設定されていません')
 }
 ```
 
-#### Verification Steps
-- [ ] No hardcoded API keys, tokens, or passwords
-- [ ] All secrets in environment variables
-- [ ] `.env.local` in .gitignore
-- [ ] No secrets in git history
-- [ ] Production secrets in hosting platform (Vercel, Railway)
+#### 確認ステップ
+- [ ] ハードコードされたAPIキー、トークン、パスワードなし
+- [ ] すべてのシークレットが環境変数に
+- [ ] `.env.local`が.gitignoreに
+- [ ] git履歴にシークレットなし
+- [ ] 本番シークレットがホスティングプラットフォーム（Vercel、Railway）に
 
-### 2. Input Validation
+### 2. 入力検証
 
-#### Always Validate User Input
+#### 常にユーザー入力を検証
 ```typescript
 import { z } from 'zod'
 
-// Define validation schema
+// 検証スキーマを定義
 const CreateUserSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1).max(100),
   age: z.number().int().min(0).max(150)
 })
 
-// Validate before processing
+// 処理前に検証
 export async function createUser(input: unknown) {
   try {
     const validated = CreateUserSchema.parse(input)
@@ -72,131 +72,131 @@ export async function createUser(input: unknown) {
 }
 ```
 
-#### File Upload Validation
+#### ファイルアップロード検証
 ```typescript
 function validateFileUpload(file: File) {
-  // Size check (5MB max)
+  // サイズチェック（最大5MB）
   const maxSize = 5 * 1024 * 1024
   if (file.size > maxSize) {
-    throw new Error('File too large (max 5MB)')
+    throw new Error('ファイルが大きすぎます（最大5MB）')
   }
 
-  // Type check
+  // タイプチェック
   const allowedTypes = ['image/jpeg', 'image/png', 'image/gif']
   if (!allowedTypes.includes(file.type)) {
-    throw new Error('Invalid file type')
+    throw new Error('無効なファイルタイプです')
   }
 
-  // Extension check
+  // 拡張子チェック
   const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif']
   const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
   if (!extension || !allowedExtensions.includes(extension)) {
-    throw new Error('Invalid file extension')
+    throw new Error('無効なファイル拡張子です')
   }
 
   return true
 }
 ```
 
-#### Verification Steps
-- [ ] All user inputs validated with schemas
-- [ ] File uploads restricted (size, type, extension)
-- [ ] No direct use of user input in queries
-- [ ] Whitelist validation (not blacklist)
-- [ ] Error messages don't leak sensitive info
+#### 確認ステップ
+- [ ] すべてのユーザー入力がスキーマで検証済み
+- [ ] ファイルアップロードが制限済み（サイズ、タイプ、拡張子）
+- [ ] クエリでユーザー入力を直接使用していない
+- [ ] ホワイトリスト検証（ブラックリストではない）
+- [ ] エラーメッセージが機密情報を漏洩しない
 
-### 3. SQL Injection Prevention
+### 3. SQLインジェクション防止
 
-#### ❌ NEVER Concatenate SQL
+#### ❌ 絶対にSQL連結しない
 ```typescript
-// DANGEROUS - SQL Injection vulnerability
+// 危険 - SQLインジェクション脆弱性
 const query = `SELECT * FROM users WHERE email = '${userEmail}'`
 await db.query(query)
 ```
 
-#### ✅ ALWAYS Use Parameterized Queries
+#### ✅ 常にパラメータ化クエリを使用
 ```typescript
-// Safe - parameterized query
+// 安全 - パラメータ化クエリ
 const { data } = await supabase
   .from('users')
   .select('*')
   .eq('email', userEmail)
 
-// Or with raw SQL
+// または生SQLで
 await db.query(
   'SELECT * FROM users WHERE email = $1',
   [userEmail]
 )
 ```
 
-#### Verification Steps
-- [ ] All database queries use parameterized queries
-- [ ] No string concatenation in SQL
-- [ ] ORM/query builder used correctly
-- [ ] Supabase queries properly sanitized
+#### 確認ステップ
+- [ ] すべてのデータベースクエリがパラメータ化クエリを使用
+- [ ] SQLで文字列連結なし
+- [ ] ORM/クエリビルダーが正しく使用されている
+- [ ] Supabaseクエリが適切にサニタイズされている
 
-### 4. Authentication & Authorization
+### 4. 認証・認可
 
-#### JWT Token Handling
+#### JWTトークン処理
 ```typescript
-// ❌ WRONG: localStorage (vulnerable to XSS)
+// ❌ 間違い: localStorage（XSSに脆弱）
 localStorage.setItem('token', token)
 
-// ✅ CORRECT: httpOnly cookies
+// ✅ 正しい: httpOnlyクッキー
 res.setHeader('Set-Cookie',
   `token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=3600`)
 ```
 
-#### Authorization Checks
+#### 認可チェック
 ```typescript
 export async function deleteUser(userId: string, requesterId: string) {
-  // ALWAYS verify authorization first
+  // 常に最初に認可を確認
   const requester = await db.users.findUnique({
     where: { id: requesterId }
   })
 
   if (requester.role !== 'admin') {
     return NextResponse.json(
-      { error: 'Unauthorized' },
+      { error: '権限がありません' },
       { status: 403 }
     )
   }
 
-  // Proceed with deletion
+  // 削除を実行
   await db.users.delete({ where: { id: userId } })
 }
 ```
 
-#### Row Level Security (Supabase)
+#### 行レベルセキュリティ（Supabase）
 ```sql
--- Enable RLS on all tables
+-- すべてのテーブルでRLSを有効化
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 
--- Users can only view their own data
-CREATE POLICY "Users view own data"
+-- ユーザーは自分のデータのみ表示可能
+CREATE POLICY "ユーザーは自分のデータを表示"
   ON users FOR SELECT
   USING (auth.uid() = id);
 
--- Users can only update their own data
-CREATE POLICY "Users update own data"
+-- ユーザーは自分のデータのみ更新可能
+CREATE POLICY "ユーザーは自分のデータを更新"
   ON users FOR UPDATE
   USING (auth.uid() = id);
 ```
 
-#### Verification Steps
-- [ ] Tokens stored in httpOnly cookies (not localStorage)
-- [ ] Authorization checks before sensitive operations
-- [ ] Row Level Security enabled in Supabase
-- [ ] Role-based access control implemented
-- [ ] Session management secure
+#### 確認ステップ
+- [ ] トークンがhttpOnlyクッキーに保存（localStorageではない）
+- [ ] 機密操作前の認可チェック
+- [ ] SupabaseでRow Level Securityが有効
+- [ ] ロールベースアクセス制御が実装済み
+- [ ] セッション管理が安全
 
-### 5. XSS Prevention
+### 5. XSS防止
 
-#### Sanitize HTML
+#### HTMLをサニタイズ
 ```typescript
 import DOMPurify from 'isomorphic-dompurify'
 
-// ALWAYS sanitize user-provided HTML
+// 常にユーザー提供のHTMLをサニタイズ
 function renderUserContent(html: string) {
   const clean = DOMPurify.sanitize(html, {
     ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p'],
@@ -206,7 +206,7 @@ function renderUserContent(html: string) {
 }
 ```
 
-#### Content Security Policy
+#### コンテンツセキュリティポリシー
 ```typescript
 // next.config.js
 const securityHeaders = [
@@ -224,15 +224,15 @@ const securityHeaders = [
 ]
 ```
 
-#### Verification Steps
-- [ ] User-provided HTML sanitized
-- [ ] CSP headers configured
-- [ ] No unvalidated dynamic content rendering
-- [ ] React's built-in XSS protection used
+#### 確認ステップ
+- [ ] ユーザー提供HTMLがサニタイズ済み
+- [ ] CSPヘッダーが設定済み
+- [ ] 未検証の動的コンテンツレンダリングなし
+- [ ] ReactのXSS保護機能を使用
 
-### 6. CSRF Protection
+### 6. CSRF保護
 
-#### CSRF Tokens
+#### CSRFトークン
 ```typescript
 import { csrf } from '@/lib/csrf'
 
@@ -241,76 +241,76 @@ export async function POST(request: Request) {
 
   if (!csrf.verify(token)) {
     return NextResponse.json(
-      { error: 'Invalid CSRF token' },
+      { error: '無効なCSRFトークンです' },
       { status: 403 }
     )
   }
 
-  // Process request
+  // リクエストを処理
 }
 ```
 
-#### SameSite Cookies
+#### SameSiteクッキー
 ```typescript
 res.setHeader('Set-Cookie',
   `session=${sessionId}; HttpOnly; Secure; SameSite=Strict`)
 ```
 
-#### Verification Steps
-- [ ] CSRF tokens on state-changing operations
-- [ ] SameSite=Strict on all cookies
-- [ ] Double-submit cookie pattern implemented
+#### 確認ステップ
+- [ ] 状態変更操作でCSRFトークン
+- [ ] すべてのクッキーでSameSite=Strict
+- [ ] ダブルサブミットクッキーパターンが実装済み
 
-### 7. Rate Limiting
+### 7. レート制限
 
-#### API Rate Limiting
+#### APIレート制限
 ```typescript
 import rateLimit from 'express-rate-limit'
 
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // 100 requests per window
-  message: 'Too many requests'
+  windowMs: 15 * 60 * 1000, // 15分
+  max: 100, // ウィンドウあたり100リクエスト
+  message: 'リクエストが多すぎます'
 })
 
-// Apply to routes
+// ルートに適用
 app.use('/api/', limiter)
 ```
 
-#### Expensive Operations
+#### 高コスト操作
 ```typescript
-// Aggressive rate limiting for searches
+// 検索の積極的レート制限
 const searchLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1 minute
-  max: 10, // 10 requests per minute
-  message: 'Too many search requests'
+  windowMs: 60 * 1000, // 1分
+  max: 10, // 1分あたり10リクエスト
+  message: '検索リクエストが多すぎます'
 })
 
 app.use('/api/search', searchLimiter)
 ```
 
-#### Verification Steps
-- [ ] Rate limiting on all API endpoints
-- [ ] Stricter limits on expensive operations
-- [ ] IP-based rate limiting
-- [ ] User-based rate limiting (authenticated)
+#### 確認ステップ
+- [ ] すべてのAPIエンドポイントでレート制限
+- [ ] 高コスト操作でより厳しい制限
+- [ ] IPベースレート制限
+- [ ] ユーザーベースレート制限（認証済み）
 
-### 8. Sensitive Data Exposure
+### 8. 機密データ露出
 
-#### Logging
+#### ログ
 ```typescript
-// ❌ WRONG: Logging sensitive data
-console.log('User login:', { email, password })
-console.log('Payment:', { cardNumber, cvv })
+// ❌ 間違い: 機密データをログ
+console.log('ユーザーログイン:', { email, password })
+console.log('支払い:', { cardNumber, cvv })
 
-// ✅ CORRECT: Redact sensitive data
-console.log('User login:', { email, userId })
-console.log('Payment:', { last4: card.last4, userId })
+// ✅ 正しい: 機密データを編集
+console.log('ユーザーログイン:', { email, userId })
+console.log('支払い:', { last4: card.last4, userId })
 ```
 
-#### Error Messages
+#### エラーメッセージ
 ```typescript
-// ❌ WRONG: Exposing internal details
+// ❌ 間違い: 内部詳細を露出
 catch (error) {
   return NextResponse.json(
     { error: error.message, stack: error.stack },
@@ -318,25 +318,25 @@ catch (error) {
   )
 }
 
-// ✅ CORRECT: Generic error messages
+// ✅ 正しい: 一般的なエラーメッセージ
 catch (error) {
-  console.error('Internal error:', error)
+  console.error('内部エラー:', error)
   return NextResponse.json(
-    { error: 'An error occurred. Please try again.' },
+    { error: 'エラーが発生しました。再試行してください。' },
     { status: 500 }
   )
 }
 ```
 
-#### Verification Steps
-- [ ] No passwords, tokens, or secrets in logs
-- [ ] Error messages generic for users
-- [ ] Detailed errors only in server logs
-- [ ] No stack traces exposed to users
+#### 確認ステップ
+- [ ] ログにパスワード、トークン、シークレットなし
+- [ ] ユーザー向けエラーメッセージは一般的
+- [ ] 詳細エラーはサーバーログのみ
+- [ ] ユーザーにスタックトレースを露出しない
 
-### 9. Blockchain Security (Solana)
+### 9. ブロックチェーンセキュリティ（Solana）
 
-#### Wallet Verification
+#### ウォレット検証
 ```typescript
 import { verify } from '@solana/web3.js'
 
@@ -358,88 +358,88 @@ async function verifyWalletOwnership(
 }
 ```
 
-#### Transaction Verification
+#### トランザクション検証
 ```typescript
 async function verifyTransaction(transaction: Transaction) {
-  // Verify recipient
+  // 受信者を確認
   if (transaction.to !== expectedRecipient) {
-    throw new Error('Invalid recipient')
+    throw new Error('無効な受信者です')
   }
 
-  // Verify amount
+  // 金額を確認
   if (transaction.amount > maxAmount) {
-    throw new Error('Amount exceeds limit')
+    throw new Error('金額が制限を超えています')
   }
 
-  // Verify user has sufficient balance
+  // ユーザーが十分な残高を持っているか確認
   const balance = await getBalance(transaction.from)
   if (balance < transaction.amount) {
-    throw new Error('Insufficient balance')
+    throw new Error('残高不足です')
   }
 
   return true
 }
 ```
 
-#### Verification Steps
-- [ ] Wallet signatures verified
-- [ ] Transaction details validated
-- [ ] Balance checks before transactions
-- [ ] No blind transaction signing
+#### 確認ステップ
+- [ ] ウォレット署名が検証済み
+- [ ] トランザクション詳細が検証済み
+- [ ] トランザクション前の残高チェック
+- [ ] ブラインドトランザクション署名なし
 
-### 10. Dependency Security
+### 10. 依存関係セキュリティ
 
-#### Regular Updates
+#### 定期更新
 ```bash
-# Check for vulnerabilities
+# 脆弱性をチェック
 npm audit
 
-# Fix automatically fixable issues
+# 自動修正可能な問題を修正
 npm audit fix
 
-# Update dependencies
+# 依存関係を更新
 npm update
 
-# Check for outdated packages
+# 古いパッケージをチェック
 npm outdated
 ```
 
-#### Lock Files
+#### ロックファイル
 ```bash
-# ALWAYS commit lock files
+# 常にロックファイルをコミット
 git add package-lock.json
 
-# Use in CI/CD for reproducible builds
-npm ci  # Instead of npm install
+# 再現可能なビルドのためCI/CDで使用
+npm ci  # npm installの代わり
 ```
 
-#### Verification Steps
-- [ ] Dependencies up to date
-- [ ] No known vulnerabilities (npm audit clean)
-- [ ] Lock files committed
-- [ ] Dependabot enabled on GitHub
-- [ ] Regular security updates
+#### 確認ステップ
+- [ ] 依存関係が最新
+- [ ] 既知の脆弱性なし（npm audit clean）
+- [ ] ロックファイルがコミット済み
+- [ ] GitHubでDependabotが有効
+- [ ] 定期的なセキュリティ更新
 
-## Security Testing
+## セキュリティテスト
 
-### Automated Security Tests
+### 自動セキュリティテスト
 ```typescript
-// Test authentication
-test('requires authentication', async () => {
+// 認証をテスト
+test('認証が必要', async () => {
   const response = await fetch('/api/protected')
   expect(response.status).toBe(401)
 })
 
-// Test authorization
-test('requires admin role', async () => {
+// 認可をテスト
+test('管理者ロールが必要', async () => {
   const response = await fetch('/api/admin', {
     headers: { Authorization: `Bearer ${userToken}` }
   })
   expect(response.status).toBe(403)
 })
 
-// Test input validation
-test('rejects invalid input', async () => {
+// 入力検証をテスト
+test('無効な入力を拒否', async () => {
   const response = await fetch('/api/users', {
     method: 'POST',
     body: JSON.stringify({ email: 'not-an-email' })
@@ -447,8 +447,8 @@ test('rejects invalid input', async () => {
   expect(response.status).toBe(400)
 })
 
-// Test rate limiting
-test('enforces rate limits', async () => {
+// レート制限をテスト
+test('レート制限を強制', async () => {
   const requests = Array(101).fill(null).map(() =>
     fetch('/api/endpoint')
   )
@@ -460,35 +460,35 @@ test('enforces rate limits', async () => {
 })
 ```
 
-## Pre-Deployment Security Checklist
+## デプロイ前セキュリティチェックリスト
 
-Before ANY production deployment:
+本番デプロイメント前に必須:
 
-- [ ] **Secrets**: No hardcoded secrets, all in env vars
-- [ ] **Input Validation**: All user inputs validated
-- [ ] **SQL Injection**: All queries parameterized
-- [ ] **XSS**: User content sanitized
-- [ ] **CSRF**: Protection enabled
-- [ ] **Authentication**: Proper token handling
-- [ ] **Authorization**: Role checks in place
-- [ ] **Rate Limiting**: Enabled on all endpoints
-- [ ] **HTTPS**: Enforced in production
-- [ ] **Security Headers**: CSP, X-Frame-Options configured
-- [ ] **Error Handling**: No sensitive data in errors
-- [ ] **Logging**: No sensitive data logged
-- [ ] **Dependencies**: Up to date, no vulnerabilities
-- [ ] **Row Level Security**: Enabled in Supabase
-- [ ] **CORS**: Properly configured
-- [ ] **File Uploads**: Validated (size, type)
-- [ ] **Wallet Signatures**: Verified (if blockchain)
+- [ ] **シークレット**: ハードコードされたシークレットなし、すべて環境変数に
+- [ ] **入力検証**: すべてのユーザー入力が検証済み
+- [ ] **SQLインジェクション**: すべてのクエリがパラメータ化済み
+- [ ] **XSS**: ユーザーコンテンツがサニタイズ済み
+- [ ] **CSRF**: 保護が有効
+- [ ] **認証**: 適切なトークン処理
+- [ ] **認可**: ロールチェックが実装済み
+- [ ] **レート制限**: すべてのエンドポイントで有効
+- [ ] **HTTPS**: 本番で強制
+- [ ] **セキュリティヘッダー**: CSP、X-Frame-Optionsが設定済み
+- [ ] **エラーハンドリング**: エラーに機密データなし
+- [ ] **ログ**: 機密データがログされていない
+- [ ] **依存関係**: 最新、脆弱性なし
+- [ ] **Row Level Security**: Supabaseで有効
+- [ ] **CORS**: 適切に設定済み
+- [ ] **ファイルアップロード**: 検証済み（サイズ、タイプ）
+- [ ] **ウォレット署名**: 検証済み（ブロックチェーンの場合）
 
-## Resources
+## リソース
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-- [Next.js Security](https://nextjs.org/docs/security)
-- [Supabase Security](https://supabase.com/docs/guides/auth)
-- [Web Security Academy](https://portswigger.net/web-security)
+- [Next.jsセキュリティ](https://nextjs.org/docs/security)
+- [Supabaseセキュリティ](https://supabase.com/docs/guides/auth)
+- [Webセキュリティアカデミー](https://portswigger.net/web-security)
 
 ---
 
-**Remember**: Security is not optional. One vulnerability can compromise the entire platform. When in doubt, err on the side of caution.
+**覚えておくこと**: セキュリティはオプションではありません。一つの脆弱性がプラットフォーム全体を危険にさらす可能性があります。疑わしい場合は、慎重な側に立ってください。

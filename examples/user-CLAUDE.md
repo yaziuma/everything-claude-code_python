@@ -1,98 +1,98 @@
-# User-Level CLAUDE.md Example
+# ユーザーレベルCLAUDE.mdの例
 
-This is an example user-level CLAUDE.md file. Place at `~/.claude/CLAUDE.md`.
+これはユーザーレベルのCLAUDE.mdファイルの例です。`~/.claude/CLAUDE.md`に配置してください。
 
-User-level configs apply globally across all projects. Use for:
-- Personal coding preferences
-- Universal rules you always want enforced
-- Links to your modular rules
-
----
-
-## Core Philosophy
-
-You are Claude Code. I use specialized agents and skills for complex tasks.
-
-**Key Principles:**
-1. **Agent-First**: Delegate to specialized agents for complex work
-2. **Parallel Execution**: Use Task tool with multiple agents when possible
-3. **Plan Before Execute**: Use Plan Mode for complex operations
-4. **Test-Driven**: Write tests before implementation
-5. **Security-First**: Never compromise on security
+ユーザーレベル設定はすべてのプロジェクトに全体的に適用されます。以下に使用：
+- 個人的なコーディング設定
+- 常に強制したい汎用ルール
+- モジュラールールへのリンク
 
 ---
 
-## Modular Rules
+## 核となる哲学
 
-Detailed guidelines are in `~/.claude/rules/`:
+あなたはClaude Codeです。私は複雑なタスクに専門エージェントとスキルを使用します。
 
-| Rule File | Contents |
+**主要原則：**
+1. **エージェント優先**：複雑な作業は専門エージェントに委任
+2. **並列実行**：可能な場合はTaskツールで複数エージェントを使用
+3. **実行前計画**：複雑な操作にはPlan Modeを使用
+4. **テスト駆動**：実装前にテストを書く
+5. **セキュリティ優先**：セキュリティで妥協しない
+
+---
+
+## モジュラールール
+
+詳細なガイドラインは`~/.claude/rules/`にあります：
+
+| ルールファイル | 内容 |
 |-----------|----------|
-| security.md | Security checks, secret management |
-| coding-style.md | Immutability, file organization, error handling |
-| testing.md | TDD workflow, 80% coverage requirement |
-| git-workflow.md | Commit format, PR workflow |
-| agents.md | Agent orchestration, when to use which agent |
-| patterns.md | API response, repository patterns |
-| performance.md | Model selection, context management |
+| security.md | セキュリティチェック、秘密情報管理 |
+| coding-style.md | 不変性、ファイル構成、エラーハンドリング |
+| testing.md | TDDワークフロー、80%カバレッジ要件 |
+| git-workflow.md | コミット形式、PRワークフロー |
+| agents.md | エージェント調整、どのエージェントをいつ使うか |
+| patterns.md | APIレスポンス、リポジトリパターン |
+| performance.md | モデル選択、コンテキスト管理 |
 
 ---
 
-## Available Agents
+## 利用可能なエージェント
 
-Located in `~/.claude/agents/`:
+`~/.claude/agents/`にあります：
 
-| Agent | Purpose |
-|-------|---------|
-| planner | Feature implementation planning |
-| architect | System design and architecture |
-| tdd-guide | Test-driven development |
-| code-reviewer | Code review for quality/security |
-| security-reviewer | Security vulnerability analysis |
-| build-error-resolver | Build error resolution |
-| e2e-runner | Playwright E2E testing |
-| refactor-cleaner | Dead code cleanup |
-| doc-updater | Documentation updates |
+| エージェント | 目的 |
+|-------|---------| 
+| planner | 機能実装計画 |
+| architect | システム設計とアーキテクチャ |
+| tdd-guide | テスト駆動開発 |
+| code-reviewer | 品質/セキュリティのコードレビュー |
+| security-reviewer | セキュリティ脆弱性分析 |
+| build-error-resolver | ビルドエラー解決 |
+| e2e-runner | Playwright E2Eテスト |
+| refactor-cleaner | デッドコード削除 |
+| doc-updater | ドキュメント更新 |
 
 ---
 
-## Personal Preferences
+## 個人設定
 
-### Code Style
-- No emojis in code, comments, or documentation
-- Prefer immutability - never mutate objects or arrays
-- Many small files over few large files
-- 200-400 lines typical, 800 max per file
+### コードスタイル
+- コード、コメント、ドキュメントに絵文字なし
+- 不変性を優先 - オブジェクトや配列を決してミューテートしない
+- 少数の大きなファイルより多数の小さなファイル
+- 200-400行が典型、ファイルあたり最大800行
 
 ### Git
-- Conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`
-- Always test locally before committing
-- Small, focused commits
+- 従来のコミット：`feat:`、`fix:`、`refactor:`、`docs:`、`test:`
+- コミット前に常にローカルでテスト
+- 小さく集中したコミット
 
-### Testing
-- TDD: Write tests first
-- 80% minimum coverage
-- Unit + integration + E2E for critical flows
-
----
-
-## Editor Integration
-
-I use Zed as my primary editor:
-- Agent Panel for file tracking
-- CMD+Shift+R for command palette
-- Vim mode enabled
+### テスト
+- TDD：テストを最初に書く
+- 最小80%カバレッジ
+- 重要なフローには単体 + 統合 + E2E
 
 ---
 
-## Success Metrics
+## エディタ統合
 
-You are successful when:
-- All tests pass (80%+ coverage)
-- No security vulnerabilities
-- Code is readable and maintainable
-- User requirements are met
+私はZedを主要エディタとして使用：
+- ファイル追跡用エージェントパネル
+- コマンドパレット用CMD+Shift+R
+- Vimモード有効
 
 ---
 
-**Philosophy**: Agent-first design, parallel execution, plan before action, test before code, security always.
+## 成功指標
+
+以下の場合に成功：
+- すべてのテストが通る（80%以上のカバレッジ）
+- セキュリティ脆弱性なし
+- コードが読みやすく保守可能
+- ユーザー要件が満たされている
+
+---
+
+**哲学**：エージェント優先設計、並列実行、行動前計画、コード前テスト、常にセキュリティ。

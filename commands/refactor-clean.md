@@ -1,28 +1,28 @@
-# Refactor Clean
+# リファクタリングクリーン
 
-Safely identify and remove dead code with test verification:
+テスト検証付きでデッドコードを安全に特定・削除:
 
-1. Run dead code analysis tools:
-   - knip: Find unused exports and files
-   - depcheck: Find unused dependencies
-   - ts-prune: Find unused TypeScript exports
+1. デッドコード分析ツールを実行:
+   - knip: 未使用エクスポートとファイルを発見
+   - depcheck: 未使用依存関係を発見
+   - ts-prune: 未使用TypeScriptエクスポートを発見
 
-2. Generate comprehensive report in .reports/dead-code-analysis.md
+2. .reports/dead-code-analysis.mdに包括的レポートを生成
 
-3. Categorize findings by severity:
-   - SAFE: Test files, unused utilities
-   - CAUTION: API routes, components
-   - DANGER: Config files, main entry points
+3. 発見事項を重要度で分類:
+   - SAFE: テストファイル、未使用ユーティリティ
+   - CAUTION: APIルート、コンポーネント
+   - DANGER: 設定ファイル、メインエントリポイント
 
-4. Propose safe deletions only
+4. 安全な削除のみを提案
 
-5. Before each deletion:
-   - Run full test suite
-   - Verify tests pass
-   - Apply change
-   - Re-run tests
-   - Rollback if tests fail
+5. 各削除前に:
+   - 完全なテストスイートを実行
+   - テストが通ることを確認
+   - 変更を適用
+   - テストを再実行
+   - テストが失敗した場合はロールバック
 
-6. Show summary of cleaned items
+6. クリーンアップされた項目の要約を表示
 
-Never delete code without running tests first!
+まずテストを実行せずにコードを削除しない！

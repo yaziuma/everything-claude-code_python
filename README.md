@@ -1,256 +1,256 @@
 # Everything Claude Code
 
-**The complete collection of Claude Code configs from an Anthropic hackathon winner.**
+**Anthropicハッカソン優勝者による、Claude Codeの完全なコンフィグ集**
 
-This repo contains production-ready agents, skills, hooks, commands, rules, and MCP configurations that I use daily with Claude Code. These configs evolved over 10+ months of intensive use building real products.
+このリポジトリには、実際のプロダクト開発で10ヶ月以上使い込んで進化させた、本番環境対応のエージェント、スキル、フック、コマンド、ルール、MCPコンフィグが含まれています。
 
 ---
 
-## Read the Full Guide First
+## まず完全ガイドをお読みください
 
-**Before diving into these configs, read the complete guide on X:**
+**これらのコンフィグに入る前に、Xの完全ガイドをお読みください：**
 
 
 <img width="592" height="445" alt="image" src="https://github.com/user-attachments/assets/1a471488-59cc-425b-8345-5245c7efbcef" />
 
 
-**[The Shorthand Guide to Everything Claude Code](https://x.com/affaanmustafa/status/2012378465664745795)**
+**[Everything Claude Code 完全ガイド](https://x.com/affaanmustafa/status/2012378465664745795)**
 
 
 
-The guide explains:
-- What each config type does and when to use it
-- How to structure your Claude Code setup
-- Context window management (critical for performance)
-- Parallel workflows and advanced techniques
-- The philosophy behind these configs
+ガイドでは以下を説明しています：
+- 各コンフィグタイプの役割と使用タイミング
+- Claude Codeセットアップの構造化方法
+- コンテキストウィンドウ管理（パフォーマンスに重要）
+- 並列ワークフローと高度なテクニック
+- これらのコンフィグの背景にある哲学
 
-**This repo is configs only! Tips, tricks and more examples are in my X articles and videos (links will be appended to this readme as it evolves).**
+**このリポジトリはコンフィグのみです！ヒント、トリック、その他の例は私のX記事と動画にあります（このreadmeの進化に合わせてリンクを追加予定）。**
 
 ---
 
-## What's Inside
+## 内容
 
 ```
 everything-claude-code/
-|-- agents/           # Specialized subagents for delegation
-|   |-- planner.md           # Feature implementation planning
-|   |-- architect.md         # System design decisions
-|   |-- tdd-guide.md         # Test-driven development
-|   |-- code-reviewer.md     # Quality and security review
-|   |-- security-reviewer.md # Vulnerability analysis
+|-- agents/           # 委任用の専門サブエージェント
+|   |-- planner.md           # 機能実装計画
+|   |-- architect.md         # システム設計決定
+|   |-- tdd-guide.md         # テスト駆動開発
+|   |-- code-reviewer.md     # 品質・セキュリティレビュー
+|   |-- security-reviewer.md # 脆弱性分析
 |   |-- build-error-resolver.md
-|   |-- e2e-runner.md        # Playwright E2E testing
-|   |-- refactor-cleaner.md  # Dead code cleanup
-|   |-- doc-updater.md       # Documentation sync
+|   |-- e2e-runner.md        # Playwright E2Eテスト
+|   |-- refactor-cleaner.md  # デッドコード削除
+|   |-- doc-updater.md       # ドキュメント同期
 |
-|-- skills/           # Workflow definitions and domain knowledge
-|   |-- coding-standards.md         # Language best practices
-|   |-- backend-patterns.md         # API, database, caching patterns
-|   |-- frontend-patterns.md        # React, Next.js patterns
-|   |-- project-guidelines-example.md # Example project-specific skill
-|   |-- tdd-workflow/               # TDD methodology
-|   |-- security-review/            # Security checklist
-|   |-- clickhouse-io.md            # ClickHouse analytics
+|-- skills/           # ワークフロー定義とドメイン知識
+|   |-- coding-standards.md         # 言語ベストプラクティス
+|   |-- backend-patterns.md         # API、データベース、キャッシュパターン
+|   |-- frontend-patterns.md        # React、Next.jsパターン
+|   |-- project-guidelines-example.md # プロジェクト固有スキル例
+|   |-- tdd-workflow/               # TDD方法論
+|   |-- security-review/            # セキュリティチェックリスト
+|   |-- clickhouse-io.md            # ClickHouse分析
 |
-|-- commands/         # Slash commands for quick execution
-|   |-- tdd.md              # /tdd - Test-driven development
-|   |-- plan.md             # /plan - Implementation planning
-|   |-- e2e.md              # /e2e - E2E test generation
-|   |-- code-review.md      # /code-review - Quality review
-|   |-- build-fix.md        # /build-fix - Fix build errors
-|   |-- refactor-clean.md   # /refactor-clean - Dead code removal
-|   |-- test-coverage.md    # /test-coverage - Coverage analysis
-|   |-- update-codemaps.md  # /update-codemaps - Refresh docs
-|   |-- update-docs.md      # /update-docs - Sync documentation
+|-- commands/         # クイック実行用スラッシュコマンド
+|   |-- tdd.md              # /tdd - テスト駆動開発
+|   |-- plan.md             # /plan - 実装計画
+|   |-- e2e.md              # /e2e - E2Eテスト生成
+|   |-- code-review.md      # /code-review - 品質レビュー
+|   |-- build-fix.md        # /build-fix - ビルドエラー修正
+|   |-- refactor-clean.md   # /refactor-clean - デッドコード削除
+|   |-- test-coverage.md    # /test-coverage - カバレッジ分析
+|   |-- update-codemaps.md  # /update-codemaps - ドキュメント更新
+|   |-- update-docs.md      # /update-docs - ドキュメント同期
 |
-|-- rules/            # Always-follow guidelines
-|   |-- security.md         # Mandatory security checks
-|   |-- coding-style.md     # Immutability, file organization
-|   |-- testing.md          # TDD, 80% coverage requirement
-|   |-- git-workflow.md     # Commit format, PR process
-|   |-- agents.md           # When to delegate to subagents
-|   |-- performance.md      # Model selection, context management
-|   |-- patterns.md         # API response formats, hooks
-|   |-- hooks.md            # Hook documentation
+|-- rules/            # 常に従うべきガイドライン
+|   |-- security.md         # 必須セキュリティチェック
+|   |-- coding-style.md     # 不変性、ファイル構成
+|   |-- testing.md          # TDD、80%カバレッジ要件
+|   |-- git-workflow.md     # コミット形式、PRプロセス
+|   |-- agents.md           # サブエージェントへの委任タイミング
+|   |-- performance.md      # モデル選択、コンテキスト管理
+|   |-- patterns.md         # APIレスポンス形式、フック
+|   |-- hooks.md            # フックドキュメント
 |
-|-- hooks/            # Trigger-based automations
-|   |-- hooks.json          # PreToolUse, PostToolUse, Stop hooks
+|-- hooks/            # トリガーベース自動化
+|   |-- hooks.json          # PreToolUse、PostToolUse、Stopフック
 |
-|-- mcp-configs/      # MCP server configurations
-|   |-- mcp-servers.json    # GitHub, Supabase, Vercel, Railway, etc.
+|-- mcp-configs/      # MCPサーバー設定
+|   |-- mcp-servers.json    # GitHub、Supabase、Vercel、Railwayなど
 |
-|-- plugins/          # Plugin ecosystem documentation
-|   |-- README.md           # Plugins, marketplaces, skills guide
+|-- plugins/          # プラグインエコシステムドキュメント
+|   |-- README.md           # プラグイン、マーケットプレイス、スキルガイド
 |
-|-- examples/         # Example configurations
-    |-- CLAUDE.md           # Example project-level config
-    |-- user-CLAUDE.md      # Example user-level config (~/.claude/CLAUDE.md)
-    |-- statusline.json     # Custom status line config
+|-- examples/         # 設定例
+    |-- CLAUDE.md           # プロジェクトレベル設定例
+    |-- user-CLAUDE.md      # ユーザーレベル設定例（~/.claude/CLAUDE.md）
+    |-- statusline.json     # カスタムステータスライン設定
 ```
 
 ---
 
-## Quick Start
+## クイックスタート
 
-### 1. Copy what you need
+### 1. 必要なものをコピー
 
 ```bash
-# Clone the repo
+# リポジトリをクローン
 git clone https://github.com/affaan-m/everything-claude-code.git
 
-# Copy agents to your Claude config
+# エージェントをClaude設定にコピー
 cp everything-claude-code/agents/*.md ~/.claude/agents/
 
-# Copy rules
+# ルールをコピー
 cp everything-claude-code/rules/*.md ~/.claude/rules/
 
-# Copy commands
+# コマンドをコピー
 cp everything-claude-code/commands/*.md ~/.claude/commands/
 
-# Copy skills
+# スキルをコピー
 cp -r everything-claude-code/skills/* ~/.claude/skills/
 ```
 
-### 2. Add hooks to settings.json
+### 2. settings.jsonにフックを追加
 
-Copy the hooks from `hooks/hooks.json` to your `~/.claude/settings.json`.
+`hooks/hooks.json`のフックを`~/.claude/settings.json`にコピーします。
 
-### 3. Configure MCPs
+### 3. MCPを設定
 
-Copy desired MCP servers from `mcp-configs/mcp-servers.json` to your `~/.claude.json`.
+`mcp-configs/mcp-servers.json`から必要なMCPサーバーを`~/.claude.json`にコピーします。
 
-**Important:** Replace `YOUR_*_HERE` placeholders with your actual API keys.
+**重要：** `YOUR_*_HERE`プレースホルダーを実際のAPIキーに置き換えてください。
 
-### 4. Read the guide
+### 4. ガイドを読む
 
-Seriously, [read the guide](https://x.com/affaanmustafa/status/2012378465664745795). These configs make 10x more sense with context.
+真剣に、[ガイドを読んでください](https://x.com/affaanmustafa/status/2012378465664745795)。これらのコンフィグはコンテキストがあると10倍理解しやすくなります。
 
 ---
 
-## Key Concepts
+## 主要概念
 
-### Agents
+### エージェント
 
-Subagents handle delegated tasks with limited scope. Example:
+サブエージェントは限定されたスコープで委任されたタスクを処理します。例：
 
 ```markdown
 ---
 name: code-reviewer
-description: Reviews code for quality, security, and maintainability
+description: 品質、セキュリティ、保守性のためのコードレビュー
 tools: Read, Grep, Glob, Bash
 model: opus
 ---
 
-You are a senior code reviewer...
+あなたはシニアコードレビュアーです...
 ```
 
-### Skills
+### スキル
 
-Skills are workflow definitions invoked by commands or agents:
+スキルはコマンドやエージェントによって呼び出されるワークフロー定義です：
 
 ```markdown
-# TDD Workflow
+# TDDワークフロー
 
-1. Define interfaces first
-2. Write failing tests (RED)
-3. Implement minimal code (GREEN)
-4. Refactor (IMPROVE)
-5. Verify 80%+ coverage
+1. まずインターフェースを定義
+2. 失敗するテストを書く（RED）
+3. 最小限のコードを実装（GREEN）
+4. リファクタリング（IMPROVE）
+5. 80%以上のカバレッジを確認
 ```
 
-### Hooks
+### フック
 
-Hooks fire on tool events. Example - warn about console.log:
+フックはツールイベントで発火します。例 - console.logについて警告：
 
 ```json
 {
   "matcher": "tool == \"Edit\" && tool_input.file_path matches \"\\\\.(ts|tsx|js|jsx)$\"",
   "hooks": [{
     "type": "command",
-    "command": "#!/bin/bash\ngrep -n 'console\\.log' \"$file_path\" && echo '[Hook] Remove console.log' >&2"
+    "command": "#!/bin/bash\ngrep -n 'console\\.log' \"$file_path\" && echo '[Hook] console.logを削除してください' >&2"
   }]
 }
 ```
 
-### Rules
+### ルール
 
-Rules are always-follow guidelines. Keep them modular:
+ルールは常に従うべきガイドラインです。モジュラーに保ちます：
 
 ```
 ~/.claude/rules/
-  security.md      # No hardcoded secrets
-  coding-style.md  # Immutability, file limits
-  testing.md       # TDD, coverage requirements
+  security.md      # ハードコードされた秘密情報禁止
+  coding-style.md  # 不変性、ファイル制限
+  testing.md       # TDD、カバレッジ要件
 ```
 
 ---
 
-## Contributing
+## 貢献
 
-**Contributions are welcome and encouraged.**
+**貢献を歓迎し、推奨します。**
 
-This repo is meant to be a community resource. If you have:
-- Useful agents or skills
-- Clever hooks
-- Better MCP configurations
-- Improved rules
+このリポジトリはコミュニティリソースとなることを意図しています。以下をお持ちの場合：
+- 有用なエージェントやスキル
+- 巧妙なフック
+- より良いMCP設定
+- 改良されたルール
 
-Please contribute! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+ぜひ貢献してください！ガイドラインについては[CONTRIBUTING.md](CONTRIBUTING.md)をご覧ください。
 
-### Ideas for Contributions
+### 貢献のアイデア
 
-- Language-specific skills (Python, Go, Rust patterns)
-- Framework-specific configs (Django, Rails, Laravel)
-- DevOps agents (Kubernetes, Terraform, AWS)
-- Testing strategies (different frameworks)
-- Domain-specific knowledge (ML, data engineering, mobile)
-
----
-
-## Background
-
-I've been using Claude Code since the experimental rollout. Won the Anthropic x Forum Ventures hackathon in Sep 2025 building [zenith.chat](https://zenith.chat) with [@DRodriguezFX](https://x.com/DRodriguezFX) - entirely using Claude Code.
-
-These configs are battle-tested across multiple production applications.
+- 言語固有スキル（Python、Go、Rustパターン）
+- フレームワーク固有設定（Django、Rails、Laravel）
+- DevOpsエージェント（Kubernetes、Terraform、AWS）
+- テスト戦略（異なるフレームワーク）
+- ドメイン固有知識（ML、データエンジニアリング、モバイル）
 
 ---
 
-## Important Notes
+## 背景
 
-### Context Window Management
+私は実験的ロールアウトからClaude Codeを使用しています。2025年9月のAnthropic x Forum Venturesハッカソンで[@DRodriguezFX](https://x.com/DRodriguezFX)と[zenith.chat](https://zenith.chat)を構築して優勝しました - 完全にClaude Codeを使用して。
 
-**Critical:** Don't enable all MCPs at once. Your 200k context window can shrink to 70k with too many tools enabled.
-
-Rule of thumb:
-- Have 20-30 MCPs configured
-- Keep under 10 enabled per project
-- Under 80 tools active
-
-Use `disabledMcpServers` in project config to disable unused ones.
-
-### Customization
-
-These configs work for my workflow. You should:
-1. Start with what resonates
-2. Modify for your stack
-3. Remove what you don't use
-4. Add your own patterns
+これらのコンフィグは複数の本番アプリケーションで実戦テスト済みです。
 
 ---
 
-## Links
+## 重要な注意事項
 
-- **Full Guide:** [The Shorthand Guide to Everything Claude Code](https://x.com/affaanmustafa/status/2012378465664745795)
-- **Follow:** [@affaanmustafa](https://x.com/affaanmustafa)
-- **zenith.chat:** [zenith.chat](https://zenith.chat)
+### コンテキストウィンドウ管理
+
+**重要：** すべてのMCPを一度に有効にしないでください。ツールが多すぎると200kのコンテキストウィンドウが70kに縮小される可能性があります。
+
+経験則：
+- 20-30のMCPを設定
+- プロジェクトごとに10個未満を有効に保つ
+- アクティブなツールを80個未満に
+
+使用しないものを無効にするには、プロジェクト設定で`disabledMcpServers`を使用します。
+
+### カスタマイゼーション
+
+これらのコンフィグは私のワークフローに合わせて作られています。あなたは以下を行うべきです：
+1. 共感できるものから始める
+2. あなたのスタックに合わせて修正
+3. 使わないものを削除
+4. 独自のパターンを追加
 
 ---
 
-## License
+## リンク
 
-MIT - Use freely, modify as needed, contribute back if you can.
+- **完全ガイド：** [Everything Claude Code 完全ガイド](https://x.com/affaanmustafa/status/2012378465664745795)
+- **フォロー：** [@affaanmustafa](https://x.com/affaanmustafa)
+- **zenith.chat：** [zenith.chat](https://zenith.chat)
 
 ---
 
-**Star this repo if it helps. Read the guide. Build something great.**
+## ライセンス
+
+MIT - 自由に使用し、必要に応じて修正し、可能であれば貢献してください。
+
+---
+
+**このリポジトリが役立つ場合はスターをつけてください。ガイドを読んでください。素晴らしいものを作ってください。**
