@@ -4,8 +4,9 @@ mypy型エラーとRuffリントエラーを段階的に修正:
 
 1. チェックを実行:
    ```bash
-   mypy app/ --strict
-   ruff check app/
+   uv run ruff check app/ --fix
+   uv run mypy app/ --strict
+   uv run ruff check app/
    ```
 
 2. エラー出力を解析:
@@ -68,18 +69,18 @@ result = some_function()  # resultが使われていない
 ## コマンド
 
 ```bash
+# 自動修正可能なエラーを修正 (推奨)
+uv run ruff check app/ --fix
+
 # 型チェック
-mypy app/ --strict
+uv run mypy app/ --strict
 
 # リントチェック
-ruff check app/
-
-# 自動修正可能なエラーを修正
-ruff check app/ --fix
+uv run ruff check app/
 
 # フォーマット
-ruff format app/
+uv run ruff format app/
 
 # すべてを一度に実行
-mypy app/ && ruff check app/ && ruff format app/
+uv run ruff check app/ --fix && uv run mypy app/ --strict && uv run ruff format app/
 ```

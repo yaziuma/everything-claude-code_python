@@ -19,19 +19,19 @@
 
 ```bash
 # テスト実行
-pytest
+uv run pytest
 
 # カバレッジ付き
-pytest --cov=app --cov-report=html
+uv run pytest --cov=app --cov-report=html
 
 # 特定のテスト
-pytest tests/test_users.py -v
+uv run pytest tests/test_users.py -v
 
 # 失敗で停止
-pytest -x
+uv run pytest -x
 
 # 並列実行
-pytest -n auto
+uv run pytest -n auto
 ```
 
 ## テスト構造
@@ -39,30 +39,19 @@ pytest -n auto
 ```python
 # tests/test_users.py
 import pytest
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 from app.main import app
 
-client = TestClient(app)
-
-class TestUserCreate:
-    """ユーザー作成のテスト"""
-
-    def test_create_user_success(self):
-        """正常なユーザー作成"""
-        response = client.post(
+# AsyncClientの使用を推奨 (FastAPIのテスト)
+@pytest.mark.asyncio
+async def test_create_user_success():
+    async with AsyncClient(app=app, base_url="http://test") as ac:
+        response = await ac.post(
             "/api/users",
             json={"email": "test@example.com", "name": "Test"}
         )
-        assert response.status_code == 201
-        assert response.json()["email"] == "test@example.com"
-
-    def test_create_user_invalid_email(self):
-        """無効なメールアドレス"""
-        response = client.post(
-            "/api/users",
-            json={"email": "invalid", "name": "Test"}
-        )
-        assert response.status_code == 422  # Validation Error
+    assert response.status_code == 201
+    assert response.json()["email"] == "test@example.com"
 ```
 
 ## フィクスチャ
@@ -70,24 +59,33 @@ class TestUserCreate:
 ```python
 # tests/conftest.py
 import pytest
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 
 @pytest.fixture
-def db_session():
-    """テスト用DBセッション"""
-    engine = create_engine("sqlite:///:memory:")
-    Session = sessionmaker(bind=engine)
-    session = Session()
-    yield session
-    session.close()
+async def db_session():
+    """非同期テスト用DBセッション"""
+    # aiosqliteドライバを使用 (メモリ内DB)
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    
+    async with engine.begin() as conn:
+        # ここで create_all などを呼ぶ（Base.metadataが必要）
+        # from app.models import Base
+        # await conn.run_sync(Base.metadata.create_all)
+        pass
+
+    async_session = async_sessionmaker(engine, expire_on_commit=False)
+    
+    async with async_session() as session:
+        yield session
 
 @pytest.fixture
-def test_user(db_session):
+async def test_user(db_session):
     """テスト用ユーザー"""
+    # Userモデルのインポートが必要
+    # from app.models import User
     user = User(email="test@example.com", name="Test")
     db_session.add(user)
-    db_session.commit()
+    await db_session.commit()
     return user
 ```
 
@@ -102,10 +100,11 @@ def test_user(db_session):
 # モックの例
 from unittest.mock import patch, MagicMock
 
-def test_external_api_call():
+@pytest.mark.asyncio
+async def test_external_api_call():
     with patch("app.services.external_api.call") as mock_call:
         mock_call.return_value = {"status": "ok"}
-        result = service.process()
+        result = await service.process()
         assert result["status"] == "ok"
         mock_call.assert_called_once()
 ```

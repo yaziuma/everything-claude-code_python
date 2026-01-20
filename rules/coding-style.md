@@ -1,23 +1,14 @@
 # コーディングスタイル
 
-## 不変性（重要）
+## 状態管理と不変性
 
-常に新しいオブジェクトを作成し、決してミューテートしない：
+共有される状態（State）やドメインモデルは不変に保つことを推奨しますが、関数内部の一時変数やリスト操作などはPythonicな方法（ミュータブル）で構いません。
+
+### 推奨：ドメインモデルの不変性
+
+Pydanticモデルを使用し、`frozen=True`を設定することを推奨します：
 
 ```python
-# 間違い：ミューテーション
-def update_user(user: dict, name: str) -> dict:
-    user["name"] = name  # ミューテーション！
-    return user
-
-# 正しい：不変性
-def update_user(user: dict, name: str) -> dict:
-    return {
-        **user,
-        "name": name
-    }
-
-# ベスト：Pydanticモデルで不変性
 from pydantic import BaseModel
 
 class User(BaseModel):
@@ -28,7 +19,21 @@ class User(BaseModel):
     email: str
 
 # 更新は新しいインスタンスを作成
-updated_user = user.model_copy(update={"name": new_name})
+# updated_user = user.model_copy(update={"name": new_name})
+```
+
+### 許容：ローカル変数のミューテーション
+
+関数スコープ内でのリスト構築などは、パフォーマンスと可読性のためにミュータブルな操作を行っても構いません。
+
+```python
+# 許容：リストへの追加
+def process_items(items: list[str]) -> list[str]:
+    result = []
+    for item in items:
+        if validate(item):
+            result.append(item.lower())  # appendはOK
+    return result
 ```
 
 ## ファイル構成
@@ -131,6 +136,6 @@ async def list_users(
 - [ ] 適切なエラーハンドリング
 - [ ] print文なし（本番コード）
 - [ ] ハードコードされた値なし
-- [ ] ミューテーションなし（不変パターンを使用）
+- [ ] 共有状態の不変性が守られている
 - [ ] 型注釈が完全
 - [ ] PEP 8準拠（Ruffでチェック）

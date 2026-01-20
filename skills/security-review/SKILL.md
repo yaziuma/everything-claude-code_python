@@ -21,85 +21,93 @@ description: 認証の追加、ユーザー入力の処理、シークレット�
 
 ### 1. シークレット管理
 
-#### ❌ 絶対にしてはいけないこと
-```typescript
-const apiKey = "sk-proj-xxxxx"  // ハードコードされたシークレット
-const dbPassword = "password123" // ソースコード内
+#### 絶対にしてはいけないこと
+```python
+# ハードコードされたシークレット
+api_key = "sk-proj-xxxxx"
+db_password = "password123"
 ```
 
-#### ✅ 常にすべきこと
-```typescript
-const apiKey = process.env.OPENAI_API_KEY
-const dbUrl = process.env.DATABASE_URL
+#### 常にすべきこと
+```python
+import os
+from pydantic_settings import BaseSettings
 
-// シークレットが存在することを確認
-if (!apiKey) {
-  throw new Error('OPENAI_API_KEYが設定されていません')
-}
+class Settings(BaseSettings):
+    database_url: str
+    anthropic_api_key: str
+    secret_key: str
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
+
+# シークレットが存在することを確認
+if not settings.anthropic_api_key:
+    raise ValueError("ANTHROPIC_API_KEYが設定されていません")
 ```
 
 #### 確認ステップ
 - [ ] ハードコードされたAPIキー、トークン、パスワードなし
 - [ ] すべてのシークレットが環境変数に
-- [ ] `.env.local`が.gitignoreに
+- [ ] `.env`が.gitignoreに
 - [ ] git履歴にシークレットなし
-- [ ] 本番シークレットがホスティングプラットフォーム（Vercel、Railway）に
+- [ ] 本番シークレットがホスティングプラットフォームに
 
 ### 2. 入力検証
 
 #### 常にユーザー入力を検証
-```typescript
-import { z } from 'zod'
+```python
+from pydantic import BaseModel, Field, EmailStr, field_validator
 
-// 検証スキーマを定義
-const CreateUserSchema = z.object({
-  email: z.string().email(),
-  name: z.string().min(1).max(100),
-  age: z.number().int().min(0).max(150)
-})
+class CreateUserSchema(BaseModel):
+    email: EmailStr
+    name: str = Field(..., min_length=1, max_length=100)
+    age: int = Field(..., ge=0, le=150)
 
-// 処理前に検証
-export async function createUser(input: unknown) {
-  try {
-    const validated = CreateUserSchema.parse(input)
-    return await db.users.create(validated)
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return { success: false, errors: error.errors }
-    }
-    throw error
-  }
-}
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        if "<script>" in v.lower():
+            raise ValueError("無効な文字が含まれています")
+        return v
+
+# FastAPIでの使用
+@router.post("/users")
+async def create_user(user: CreateUserSchema, db: DbSession):
+    # Pydanticが自動的に検証
+    return await user_service.create(db, user)
 ```
 
 #### ファイルアップロード検証
-```typescript
-function validateFileUpload(file: File) {
-  // サイズチェック（最大5MB）
-  const maxSize = 5 * 1024 * 1024
-  if (file.size > maxSize) {
-    throw new Error('ファイルが大きすぎます（最大5MB）')
-  }
+```python
+from fastapi import UploadFile, HTTPException
 
-  // タイプチェック
-  const allowedTypes = ['image/jpeg', 'image/png', 'image/gif']
-  if (!allowedTypes.includes(file.type)) {
-    throw new Error('無効なファイルタイプです')
-  }
+ALLOWED_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif"}
+MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
 
-  // 拡張子チェック
-  const allowedExtensions = ['.jpg', '.jpeg', '.png', '.gif']
-  const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0]
-  if (!extension || !allowedExtensions.includes(extension)) {
-    throw new Error('無効なファイル拡張子です')
-  }
+async def validate_file_upload(file: UploadFile) -> None:
+    """ファイルアップロードを検証"""
+    # サイズチェック
+    contents = await file.read()
+    await file.seek(0)
 
-  return true
-}
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(400, "ファイルが大きすぎます（最大5MB）")
+
+    # タイプチェック
+    if file.content_type not in ["image/jpeg", "image/png", "image/gif"]:
+        raise HTTPException(400, "無効なファイルタイプです")
+
+    # 拡張子チェック
+    ext = Path(file.filename).suffix.lower()
+    if ext not in ALLOWED_EXTENSIONS:
+        raise HTTPException(400, "無効なファイル拡張子です")
 ```
 
 #### 確認ステップ
-- [ ] すべてのユーザー入力がスキーマで検証済み
+- [ ] すべてのユーザー入力がPydanticスキーマで検証済み
 - [ ] ファイルアップロードが制限済み（サイズ、タイプ、拡張子）
 - [ ] クエリでユーザー入力を直接使用していない
 - [ ] ホワイトリスト検証（ブラックリストではない）
@@ -107,357 +115,309 @@ function validateFileUpload(file: File) {
 
 ### 3. SQLインジェクション防止
 
-#### ❌ 絶対にSQL連結しない
-```typescript
-// 危険 - SQLインジェクション脆弱性
-const query = `SELECT * FROM users WHERE email = '${userEmail}'`
-await db.query(query)
+#### 絶対にSQL連結しない
+```python
+# 危険 - SQLインジェクション脆弱性
+query = f"SELECT * FROM users WHERE email = '{user_email}'"
+await session.execute(text(query))
 ```
 
-#### ✅ 常にパラメータ化クエリを使用
-```typescript
-// 安全 - パラメータ化クエリ
-const { data } = await supabase
-  .from('users')
-  .select('*')
-  .eq('email', userEmail)
+#### 常にパラメータ化クエリを使用
+```python
+from sqlalchemy import select, text
 
-// または生SQLで
-await db.query(
-  'SELECT * FROM users WHERE email = $1',
-  [userEmail]
-)
+# SQLAlchemy ORM（安全）
+stmt = select(User).where(User.email == user_email)
+result = await session.execute(stmt)
+
+# 生SQL（パラメータ化）
+stmt = text("SELECT * FROM users WHERE email = :email")
+result = await session.execute(stmt, {"email": user_email})
 ```
 
 #### 確認ステップ
 - [ ] すべてのデータベースクエリがパラメータ化クエリを使用
 - [ ] SQLで文字列連結なし
-- [ ] ORM/クエリビルダーが正しく使用されている
-- [ ] Supabaseクエリが適切にサニタイズされている
+- [ ] SQLAlchemyが正しく使用されている
 
 ### 4. 認証・認可
 
-#### JWTトークン処理
-```typescript
-// ❌ 間違い: localStorage（XSSに脆弱）
-localStorage.setItem('token', token)
+#### JWT認証
+```python
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from datetime import datetime, timedelta
 
-// ✅ 正しい: httpOnlyクッキー
-res.setHeader('Set-Cookie',
-  `token=${token}; HttpOnly; Secure; SameSite=Strict; Max-Age=3600`)
-```
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
-#### 認可チェック
-```typescript
-export async function deleteUser(userId: string, requesterId: string) {
-  // 常に最初に認可を確認
-  const requester = await db.users.findUnique({
-    where: { id: requesterId }
-  })
+def create_access_token(user_id: str, role: str) -> str:
+    expire = datetime.utcnow() + timedelta(hours=24)
+    payload = {"sub": user_id, "role": role, "exp": expire}
+    return jwt.encode(payload, settings.secret_key, algorithm="HS256")
 
-  if (requester.role !== 'admin') {
-    return NextResponse.json(
-      { error: '権限がありません' },
-      { status: 403 }
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="認証情報が無効です",
+        headers={"WWW-Authenticate": "Bearer"},
     )
-  }
 
-  // 削除を実行
-  await db.users.delete({ where: { id: userId } })
-}
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=["HS256"])
+        user_id = payload.get("sub")
+        if user_id is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+
+    user = await db.get(User, user_id)
+    if user is None:
+        raise credentials_exception
+    return user
 ```
 
-#### 行レベルセキュリティ（Supabase）
-```sql
--- すべてのテーブルでRLSを有効化
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+#### ロールベースアクセス制御
+```python
+from enum import Enum
+from functools import wraps
 
--- ユーザーは自分のデータのみ表示可能
-CREATE POLICY "ユーザーは自分のデータを表示"
-  ON users FOR SELECT
-  USING (auth.uid() = id);
+class Role(str, Enum):
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+    USER = "user"
 
--- ユーザーは自分のデータのみ更新可能
-CREATE POLICY "ユーザーは自分のデータを更新"
-  ON users FOR UPDATE
-  USING (auth.uid() = id);
+def require_role(required_role: Role):
+    """ロールチェックデコレーター"""
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, current_user: User = Depends(get_current_user), **kwargs):
+            if current_user.role != required_role and current_user.role != Role.ADMIN:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="権限がありません"
+                )
+            return await func(*args, current_user=current_user, **kwargs)
+        return wrapper
+    return decorator
+
+# 使用例
+@router.delete("/{id}")
+@require_role(Role.ADMIN)
+async def delete_user(id: str, current_user: User = Depends(get_current_user)):
+    ...
 ```
 
 #### 確認ステップ
-- [ ] トークンがhttpOnlyクッキーに保存（localStorageではない）
+- [ ] JWTトークンが適切に検証されている
 - [ ] 機密操作前の認可チェック
-- [ ] SupabaseでRow Level Securityが有効
 - [ ] ロールベースアクセス制御が実装済み
 - [ ] セッション管理が安全
 
 ### 5. XSS防止
 
 #### HTMLをサニタイズ
-```typescript
-import DOMPurify from 'isomorphic-dompurify'
+```python
+import bleach
+from markupsafe import Markup
 
-// 常にユーザー提供のHTMLをサニタイズ
-function renderUserContent(html: string) {
-  const clean = DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'p'],
-    ALLOWED_ATTR: []
-  })
-  return <div dangerouslySetInnerHTML={{ __html: clean }} />
-}
+ALLOWED_TAGS = ["b", "i", "em", "strong", "p", "br"]
+ALLOWED_ATTRIBUTES = {}
+
+def sanitize_html(content: str) -> str:
+    """ユーザー提供のHTMLをサニタイズ"""
+    return bleach.clean(
+        content,
+        tags=ALLOWED_TAGS,
+        attributes=ALLOWED_ATTRIBUTES,
+        strip=True
+    )
+
+# Jinja2テンプレートでの使用
+# 自動エスケープはデフォルトで有効
+{{ user_input }}  # 自動的にエスケープ
+{{ user_input | safe }}  # 信頼できるHTMLのみに使用
 ```
 
-#### コンテンツセキュリティポリシー
-```typescript
-// next.config.js
-const securityHeaders = [
-  {
-    key: 'Content-Security-Policy',
-    value: `
-      default-src 'self';
-      script-src 'self' 'unsafe-eval' 'unsafe-inline';
-      style-src 'self' 'unsafe-inline';
-      img-src 'self' data: https:;
-      font-src 'self';
-      connect-src 'self' https://api.example.com;
-    `.replace(/\s{2,}/g, ' ').trim()
-  }
-]
+#### セキュリティヘッダー
+```python
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://unpkg.com; "
+            "style-src 'self' 'unsafe-inline';"
+        )
+        return response
+
+app = FastAPI()
+app.add_middleware(SecurityHeadersMiddleware)
 ```
 
 #### 確認ステップ
 - [ ] ユーザー提供HTMLがサニタイズ済み
-- [ ] CSPヘッダーが設定済み
-- [ ] 未検証の動的コンテンツレンダリングなし
-- [ ] ReactのXSS保護機能を使用
+- [ ] セキュリティヘッダーが設定済み
+- [ ] Jinja2の自動エスケープが有効
 
 ### 6. CSRF保護
 
 #### CSRFトークン
-```typescript
-import { csrf } from '@/lib/csrf'
+```python
+from fastapi_csrf_protect import CsrfProtect
+from pydantic import BaseModel
 
-export async function POST(request: Request) {
-  const token = request.headers.get('X-CSRF-Token')
+class CsrfSettings(BaseModel):
+    secret_key: str = settings.secret_key
 
-  if (!csrf.verify(token)) {
-    return NextResponse.json(
-      { error: '無効なCSRFトークンです' },
-      { status: 403 }
-    )
-  }
+@CsrfProtect.load_config
+def get_csrf_config():
+    return CsrfSettings()
 
-  // リクエストを処理
-}
-```
-
-#### SameSiteクッキー
-```typescript
-res.setHeader('Set-Cookie',
-  `session=${sessionId}; HttpOnly; Secure; SameSite=Strict`)
+# ルートでの使用
+@router.post("/submit")
+async def submit_form(
+    request: Request,
+    csrf_protect: CsrfProtect = Depends()
+):
+    await csrf_protect.validate_csrf(request)
+    # フォーム処理
 ```
 
 #### 確認ステップ
 - [ ] 状態変更操作でCSRFトークン
-- [ ] すべてのクッキーでSameSite=Strict
-- [ ] ダブルサブミットクッキーパターンが実装済み
+- [ ] すべてのクッキーでSameSite属性設定
 
 ### 7. レート制限
 
-#### APIレート制限
-```typescript
-import rateLimit from 'express-rate-limit'
+```python
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15分
-  max: 100, // ウィンドウあたり100リクエスト
-  message: 'リクエストが多すぎます'
-})
+limiter = Limiter(key_func=get_remote_address)
 
-// ルートに適用
-app.use('/api/', limiter)
-```
+@router.get("/api/search")
+@limiter.limit("10/minute")
+async def search(request: Request, q: str):
+    ...
 
-#### 高コスト操作
-```typescript
-// 検索の積極的レート制限
-const searchLimiter = rateLimit({
-  windowMs: 60 * 1000, // 1分
-  max: 10, // 1分あたり10リクエスト
-  message: '検索リクエストが多すぎます'
-})
-
-app.use('/api/search', searchLimiter)
+@router.post("/api/login")
+@limiter.limit("5/minute")
+async def login(request: Request, credentials: LoginSchema):
+    ...
 ```
 
 #### 確認ステップ
 - [ ] すべてのAPIエンドポイントでレート制限
 - [ ] 高コスト操作でより厳しい制限
 - [ ] IPベースレート制限
-- [ ] ユーザーベースレート制限（認証済み）
 
 ### 8. 機密データ露出
 
 #### ログ
-```typescript
-// ❌ 間違い: 機密データをログ
-console.log('ユーザーログイン:', { email, password })
-console.log('支払い:', { cardNumber, cvv })
+```python
+import logging
 
-// ✅ 正しい: 機密データを編集
-console.log('ユーザーログイン:', { email, userId })
-console.log('支払い:', { last4: card.last4, userId })
+logger = logging.getLogger(__name__)
+
+# 間違い: 機密データをログ
+logger.info(f"ユーザーログイン: {email}, パスワード: {password}")
+
+# 正しい: 機密データを編集
+logger.info(f"ユーザーログイン: {email}")
 ```
 
 #### エラーメッセージ
-```typescript
-// ❌ 間違い: 内部詳細を露出
-catch (error) {
-  return NextResponse.json(
-    { error: error.message, stack: error.stack },
-    { status: 500 }
-  )
-}
+```python
+# 間違い: 内部詳細を露出
+@app.exception_handler(Exception)
+async def exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"error": str(exc), "traceback": traceback.format_exc()}
+    )
 
-// ✅ 正しい: 一般的なエラーメッセージ
-catch (error) {
-  console.error('内部エラー:', error)
-  return NextResponse.json(
-    { error: 'エラーが発生しました。再試行してください。' },
-    { status: 500 }
-  )
-}
+# 正しい: 一般的なエラーメッセージ
+@app.exception_handler(Exception)
+async def exception_handler(request: Request, exc: Exception):
+    logger.exception("内部エラー")
+    return JSONResponse(
+        status_code=500,
+        content={"error": "エラーが発生しました。再試行してください。"}
+    )
 ```
 
 #### 確認ステップ
 - [ ] ログにパスワード、トークン、シークレットなし
 - [ ] ユーザー向けエラーメッセージは一般的
 - [ ] 詳細エラーはサーバーログのみ
-- [ ] ユーザーにスタックトレースを露出しない
 
-### 9. ブロックチェーンセキュリティ（Solana）
+### 9. 依存関係セキュリティ
 
-#### ウォレット検証
-```typescript
-import { verify } from '@solana/web3.js'
-
-async function verifyWalletOwnership(
-  publicKey: string,
-  signature: string,
-  message: string
-) {
-  try {
-    const isValid = verify(
-      Buffer.from(message),
-      Buffer.from(signature, 'base64'),
-      Buffer.from(publicKey, 'base64')
-    )
-    return isValid
-  } catch (error) {
-    return false
-  }
-}
-```
-
-#### トランザクション検証
-```typescript
-async function verifyTransaction(transaction: Transaction) {
-  // 受信者を確認
-  if (transaction.to !== expectedRecipient) {
-    throw new Error('無効な受信者です')
-  }
-
-  // 金額を確認
-  if (transaction.amount > maxAmount) {
-    throw new Error('金額が制限を超えています')
-  }
-
-  // ユーザーが十分な残高を持っているか確認
-  const balance = await getBalance(transaction.from)
-  if (balance < transaction.amount) {
-    throw new Error('残高不足です')
-  }
-
-  return true
-}
-```
-
-#### 確認ステップ
-- [ ] ウォレット署名が検証済み
-- [ ] トランザクション詳細が検証済み
-- [ ] トランザクション前の残高チェック
-- [ ] ブラインドトランザクション署名なし
-
-### 10. 依存関係セキュリティ
-
-#### 定期更新
 ```bash
 # 脆弱性をチェック
-npm audit
-
-# 自動修正可能な問題を修正
-npm audit fix
+pip-audit
 
 # 依存関係を更新
-npm update
+pip install --upgrade -r requirements.txt
 
-# 古いパッケージをチェック
-npm outdated
-```
-
-#### ロックファイル
-```bash
-# 常にロックファイルをコミット
-git add package-lock.json
-
-# 再現可能なビルドのためCI/CDで使用
-npm ci  # npm installの代わり
+# セキュリティ更新のみ
+safety check
 ```
 
 #### 確認ステップ
 - [ ] 依存関係が最新
-- [ ] 既知の脆弱性なし（npm audit clean）
-- [ ] ロックファイルがコミット済み
-- [ ] GitHubでDependabotが有効
+- [ ] 既知の脆弱性なし
 - [ ] 定期的なセキュリティ更新
 
 ## セキュリティテスト
 
 ### 自動セキュリティテスト
-```typescript
-// 認証をテスト
-test('認証が必要', async () => {
-  const response = await fetch('/api/protected')
-  expect(response.status).toBe(401)
-})
+```python
+import pytest
+from httpx import AsyncClient
 
-// 認可をテスト
-test('管理者ロールが必要', async () => {
-  const response = await fetch('/api/admin', {
-    headers: { Authorization: `Bearer ${userToken}` }
-  })
-  expect(response.status).toBe(403)
-})
+@pytest.mark.asyncio
+async def test_auth_required(client: AsyncClient):
+    """認証が必要"""
+    response = await client.get("/api/protected")
+    assert response.status_code == 401
 
-// 入力検証をテスト
-test('無効な入力を拒否', async () => {
-  const response = await fetch('/api/users', {
-    method: 'POST',
-    body: JSON.stringify({ email: 'not-an-email' })
-  })
-  expect(response.status).toBe(400)
-})
+@pytest.mark.asyncio
+async def test_admin_role_required(client: AsyncClient, user_token: str):
+    """管理者ロールが必要"""
+    response = await client.delete(
+        "/api/users/123",
+        headers={"Authorization": f"Bearer {user_token}"}
+    )
+    assert response.status_code == 403
 
-// レート制限をテスト
-test('レート制限を強制', async () => {
-  const requests = Array(101).fill(null).map(() =>
-    fetch('/api/endpoint')
-  )
+@pytest.mark.asyncio
+async def test_rejects_invalid_input(client: AsyncClient):
+    """無効な入力を拒否"""
+    response = await client.post(
+        "/api/users",
+        json={"email": "not-an-email"}
+    )
+    assert response.status_code == 422
 
-  const responses = await Promise.all(requests)
-  const tooManyRequests = responses.filter(r => r.status === 429)
+@pytest.mark.asyncio
+async def test_rate_limiting(client: AsyncClient):
+    """レート制限を強制"""
+    for _ in range(11):
+        response = await client.get("/api/search?q=test")
 
-  expect(tooManyRequests.length).toBeGreaterThan(0)
-})
+    assert response.status_code == 429
 ```
 
 ## デプロイ前セキュリティチェックリスト
@@ -465,11 +425,11 @@ test('レート制限を強制', async () => {
 本番デプロイメント前に必須:
 
 - [ ] **シークレット**: ハードコードされたシークレットなし、すべて環境変数に
-- [ ] **入力検証**: すべてのユーザー入力が検証済み
+- [ ] **入力検証**: すべてのユーザー入力がPydanticで検証済み
 - [ ] **SQLインジェクション**: すべてのクエリがパラメータ化済み
 - [ ] **XSS**: ユーザーコンテンツがサニタイズ済み
 - [ ] **CSRF**: 保護が有効
-- [ ] **認証**: 適切なトークン処理
+- [ ] **認証**: JWT検証が適切
 - [ ] **認可**: ロールチェックが実装済み
 - [ ] **レート制限**: すべてのエンドポイントで有効
 - [ ] **HTTPS**: 本番で強制
@@ -477,16 +437,11 @@ test('レート制限を強制', async () => {
 - [ ] **エラーハンドリング**: エラーに機密データなし
 - [ ] **ログ**: 機密データがログされていない
 - [ ] **依存関係**: 最新、脆弱性なし
-- [ ] **Row Level Security**: Supabaseで有効
-- [ ] **CORS**: 適切に設定済み
-- [ ] **ファイルアップロード**: 検証済み（サイズ、タイプ）
-- [ ] **ウォレット署名**: 検証済み（ブロックチェーンの場合）
 
 ## リソース
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
-- [Next.jsセキュリティ](https://nextjs.org/docs/security)
-- [Supabaseセキュリティ](https://supabase.com/docs/guides/auth)
+- [FastAPIセキュリティ](https://fastapi.tiangolo.com/tutorial/security/)
 - [Webセキュリティアカデミー](https://portswigger.net/web-security)
 
 ---

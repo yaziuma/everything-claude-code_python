@@ -1,0 +1,37 @@
+[project]
+name = "my-fastapi-app"
+version = "0.1.0"
+description = "FastAPI + htmx application with Claude Code patterns"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]",
+    "sqlalchemy[asyncio]",
+    "aiosqlite",
+    "jinja2",
+    "pydantic-settings",
+    "python-multipart",
+    "httpx",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-playwright",
+    "mypy",
+    "ruff",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py312"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]

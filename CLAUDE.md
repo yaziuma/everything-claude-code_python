@@ -54,12 +54,12 @@ Python + htmx向けに最適化予定。
 
 ### PostToolUse
 - PR作成後にURL表示
-- JS/TSファイル編集後にPrettier実行
-- TypeScriptエラーチェック
-- console.log警告
+- Pythonファイル編集後にRuff実行
+- mypy型チェック
+- print文警告
 
 ### Stop
-- セッション終了時のconsole.log最終監査
+- セッション終了時のprint文最終監査
 
 ## MCP設定
 
@@ -81,16 +81,18 @@ Python + htmx向けに最適化予定。
 
 ## タスク
 
-- [ ] TypeScript/React/Next.js前提の設定を削除または本環境（Python）に適合した記述に変更
+- [ ] `uv sync` を実行して環境をセットアップ
+- [ ] `pyproject.toml` に依存関係を追加
 - [ ] エージェント定義をPython向けに修正（agents/）
 - [ ] ルール定義をPython向けに修正（rules/）
 - [ ] コマンド定義をPython向けに修正（commands/）
 - [ ] スキル定義をPython向けに修正（skills/）
-- [ ] フック設定をPython向けに修正（hooks/）- Prettier→Ruff、tsc→mypy
+- [ ] フック設定をPython向けに修正（hooks/）
 - [ ] MCP設定の整理（mcp-configs/）
 
 ## 利用可能なコマンド
 
+- `/setup` - `uv sync` (初期セットアップ)
 - `/tdd` - テスト駆動開発ワークフロー
 - `/plan` - 実装計画を作成
 - `/code-review` - コード品質をレビュー
@@ -109,8 +111,8 @@ Python + htmx向けに最適化予定。
 - 200-400行が典型、最大800行
 
 ### コードスタイル
-- 常に不変性 - オブジェクトや配列を決してミューテートしない
-- 本番コードにconsole.log/print文なし
+- 状態管理は慎重に - 共有される状態は不変にする
+- 本番コードにprint文なし
 - 適切なエラーハンドリング
 
 ### テスト

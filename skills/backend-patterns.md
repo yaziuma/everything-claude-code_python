@@ -1,582 +1,841 @@
 ---
 name: backend-patterns
-description: Node.js、Express、Next.js APIルートのためのバックエンドアーキテクチャパターン、API設計、データベース最適化、サーバーサイドベストプラクティス。
+description: FastAPI、SQLAlchemy、Pydanticのためのバックエンドアーキテクチャパターン、API設計、データベース最適化、サーバーサイドベストプラクティス。
 ---
 
 # バックエンド開発パターン
 
-スケーラブルなサーバーサイドアプリケーションのためのバックエンドアーキテクチャパターンとベストプラクティス。
+スケーラブルなPythonサーバーサイドアプリケーションのためのバックエンドアーキテクチャパターンとベストプラクティス。
 
 ## API設計パターン
 
 ### RESTful API構造
 
-```typescript
-// ✅ リソースベースのURL
-GET    /api/markets                 # リソース一覧
-GET    /api/markets/:id             # 単一リソース取得
-POST   /api/markets                 # リソース作成
-PUT    /api/markets/:id             # リソース置換
-PATCH  /api/markets/:id             # リソース更新
-DELETE /api/markets/:id             # リソース削除
+```python
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import Optional
 
-// ✅ フィルタリング、ソート、ページネーションのクエリパラメータ
-GET /api/markets?status=active&sort=volume&limit=20&offset=0
+router = APIRouter(prefix="/api/markets", tags=["markets"])
+
+# リソースベースのURL
+@router.get("/")                    # リソース一覧
+@router.get("/{id}")                # 単一リソース取得
+@router.post("/")                   # リソース作成
+@router.put("/{id}")                # リソース置換
+@router.patch("/{id}")              # リソース更新
+@router.delete("/{id}")             # リソース削除
+
+# フィルタリング、ソート、ページネーションのクエリパラメータ
+@router.get("/")
+async def list_markets(
+    status: Optional[str] = Query(None),
+    sort: Optional[str] = Query("created_at"),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0)
+) -> list[MarketResponse]:
+    ...
 ```
 
 ### リポジトリパターン
 
-```typescript
-// データアクセスロジックの抽象化
-interface MarketRepository {
-  findAll(filters?: MarketFilters): Promise<Market[]>
-  findById(id: string): Promise<Market | null>
-  create(data: CreateMarketDto): Promise<Market>
-  update(id: string, data: UpdateMarketDto): Promise<Market>
-  delete(id: string): Promise<void>
-}
+```python
+from abc import ABC, abstractmethod
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-class SupabaseMarketRepository implements MarketRepository {
-  async findAll(filters?: MarketFilters): Promise<Market[]> {
-    let query = supabase.from('markets').select('*')
+class MarketRepository(ABC):
+    """データアクセスロジックの抽象化"""
 
-    if (filters?.status) {
-      query = query.eq('status', filters.status)
-    }
+    @abstractmethod
+    async def find_all(self, filters: Optional[MarketFilters] = None) -> list[Market]:
+        ...
 
-    if (filters?.limit) {
-      query = query.limit(filters.limit)
-    }
+    @abstractmethod
+    async def find_by_id(self, id: str) -> Optional[Market]:
+        ...
 
-    const { data, error } = await query
+    @abstractmethod
+    async def create(self, data: CreateMarketDto) -> Market:
+        ...
 
-    if (error) throw new Error(error.message)
-    return data
-  }
+    @abstractmethod
+    async def update(self, id: str, data: UpdateMarketDto) -> Market:
+        ...
 
-  // その他のメソッド...
-}
+    @abstractmethod
+    async def delete(self, id: str) -> None:
+        ...
+
+
+class SQLAlchemyMarketRepository(MarketRepository):
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def find_all(self, filters: Optional[MarketFilters] = None) -> list[Market]:
+        stmt = select(MarketModel)
+
+        if filters:
+            if filters.status:
+                stmt = stmt.where(MarketModel.status == filters.status)
+            if filters.limit:
+                stmt = stmt.limit(filters.limit)
+            if filters.offset:
+                stmt = stmt.offset(filters.offset)
+
+        result = await self.session.execute(stmt)
+        return [Market.model_validate(m) for m in result.scalars().all()]
+
+    async def find_by_id(self, id: str) -> Optional[Market]:
+        stmt = select(MarketModel).where(MarketModel.id == id)
+        result = await self.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return Market.model_validate(model) if model else None
+
+    # その他のメソッド...
 ```
 
 ### サービス層パターン
 
-```typescript
-// ビジネスロジックをデータアクセスから分離
-class MarketService {
-  constructor(private marketRepo: MarketRepository) {}
+```python
+from typing import Optional
 
-  async searchMarkets(query: string, limit: number = 10): Promise<Market[]> {
-    // ビジネスロジック
-    const embedding = await generateEmbedding(query)
-    const results = await this.vectorSearch(embedding, limit)
+class MarketService:
+    """ビジネスロジックをデータアクセスから分離"""
 
-    // 完全なデータを取得
-    const markets = await this.marketRepo.findByIds(results.map(r => r.id))
+    def __init__(self, market_repo: MarketRepository):
+        self.market_repo = market_repo
 
-    // 類似度でソート
-    return markets.sort((a, b) => {
-      const scoreA = results.find(r => r.id === a.id)?.score || 0
-      const scoreB = results.find(r => r.id === b.id)?.score || 0
-      return scoreA - scoreB
-    })
-  }
+    async def search_markets(self, query: str, limit: int = 10) -> list[Market]:
+        # ビジネスロジック
+        embedding = await generate_embedding(query)
+        results = await self.vector_search(embedding, limit)
 
-  private async vectorSearch(embedding: number[], limit: number) {
-    // ベクトル検索の実装
-  }
-}
+        # 完全なデータを取得
+        market_ids = [r.id for r in results]
+        markets = await self.market_repo.find_by_ids(market_ids)
+
+        # 類似度でソート
+        score_map = {r.id: r.score for r in results}
+        return sorted(markets, key=lambda m: score_map.get(m.id, 0), reverse=True)
+
+    async def _vector_search(self, embedding: list[float], limit: int) -> list[SearchResult]:
+        # ベクトル検索の実装
+        ...
+```
+
+### 依存性注入パターン
+
+```python
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Annotated, AsyncGenerator
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_factory() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+def get_market_repository(
+    session: AsyncSession = Depends(get_db)
+) -> MarketRepository:
+    return SQLAlchemyMarketRepository(session)
+
+def get_market_service(
+    repo: MarketRepository = Depends(get_market_repository)
+) -> MarketService:
+    return MarketService(repo)
+
+# 型エイリアス
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+MarketRepo = Annotated[MarketRepository, Depends(get_market_repository)]
+MarketSvc = Annotated[MarketService, Depends(get_market_service)]
+
+# 使用方法
+@router.get("/{id}")
+async def get_market(id: str, service: MarketSvc) -> MarketResponse:
+    market = await service.find_by_id(id)
+    if not market:
+        raise HTTPException(status_code=404, detail="マーケットが見つかりません")
+    return MarketResponse.model_validate(market)
 ```
 
 ### ミドルウェアパターン
 
-```typescript
-// リクエスト/レスポンス処理パイプライン
-export function withAuth(handler: NextApiHandler): NextApiHandler {
-  return async (req, res) => {
-    const token = req.headers.authorization?.replace('Bearer ', '')
+```python
+from fastapi import Request, HTTPException
+from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+import time
 
-    if (!token) {
-      return res.status(401).json({ error: 'Unauthorized' })
-    }
+class TimingMiddleware(BaseHTTPMiddleware):
+    """リクエスト処理時間を計測"""
 
-    try {
-      const user = await verifyToken(token)
-      req.user = user
-      return handler(req, res)
-    } catch (error) {
-      return res.status(401).json({ error: 'Invalid token' })
-    }
-  }
-}
+    async def dispatch(self, request: Request, call_next):
+        start_time = time.perf_counter()
+        response = await call_next(request)
+        process_time = time.perf_counter() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
+        return response
 
-// 使用方法
-export default withAuth(async (req, res) => {
-  // ハンドラーはreq.userにアクセス可能
-})
+
+class AuthMiddleware(BaseHTTPMiddleware):
+    """認証ミドルウェア"""
+
+    async def dispatch(self, request: Request, call_next):
+        # 公開エンドポイントをスキップ
+        if request.url.path in ["/health", "/docs", "/openapi.json"]:
+            return await call_next(request)
+
+        token = request.headers.get("Authorization", "").replace("Bearer ", "")
+        if not token:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "認証が必要です"}
+            )
+
+        try:
+            user = await verify_token(token)
+            request.state.user = user
+        except Exception:
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "無効なトークンです"}
+            )
+
+        return await call_next(request)
+
+# アプリケーションに追加
+app.add_middleware(TimingMiddleware)
+app.add_middleware(AuthMiddleware)
 ```
 
 ## データベースパターン
 
+### SQLAlchemyモデル定義
+
+```python
+from sqlalchemy import String, DateTime, ForeignKey, func
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from datetime import datetime
+from uuid import uuid4
+
+class Base(DeclarativeBase):
+    pass
+
+class MarketModel(Base):
+    __tablename__ = "markets"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid4()))
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(String(2000), nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+    creator_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, onupdate=func.now())
+
+    # リレーション
+    creator: Mapped["UserModel"] = relationship(back_populates="markets")
+    trades: Mapped[list["TradeModel"]] = relationship(back_populates="market")
+```
+
 ### クエリ最適化
 
-```typescript
-// ✅ 良い例: 必要な列のみ選択
-const { data } = await supabase
-  .from('markets')
-  .select('id, name, status, volume')
-  .eq('status', 'active')
-  .order('volume', { ascending: false })
-  .limit(10)
+```python
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload, joinedload
 
-// ❌ 悪い例: すべてを選択
-const { data } = await supabase
-  .from('markets')
-  .select('*')
+# 良い例: 必要な列のみ選択
+stmt = (
+    select(MarketModel.id, MarketModel.name, MarketModel.status)
+    .where(MarketModel.status == "active")
+    .order_by(MarketModel.volume.desc())
+    .limit(10)
+)
+result = await session.execute(stmt)
+markets = result.all()
+
+# 悪い例: すべてを選択
+stmt = select(MarketModel)
 ```
 
 ### N+1クエリ問題の防止
 
-```typescript
-// ❌ 悪い例: N+1クエリ問題
-const markets = await getMarkets()
-for (const market of markets) {
-  market.creator = await getUser(market.creator_id)  // Nクエリ
-}
+```python
+# 悪い例: N+1クエリ問題
+markets = await session.execute(select(MarketModel))
+for market in markets.scalars():
+    # 各マーケットで追加クエリが発生
+    creator = await session.execute(
+        select(UserModel).where(UserModel.id == market.creator_id)
+    )
 
-// ✅ 良い例: バッチ取得
-const markets = await getMarkets()
-const creatorIds = markets.map(m => m.creator_id)
-const creators = await getUsers(creatorIds)  // 1クエリ
-const creatorMap = new Map(creators.map(c => [c.id, c]))
+# 良い例: Eager Loading（selectinload）
+stmt = (
+    select(MarketModel)
+    .options(selectinload(MarketModel.creator))
+    .where(MarketModel.status == "active")
+)
+result = await session.execute(stmt)
+markets = result.scalars().all()
+# market.creator は追加クエリなしでアクセス可能
 
-markets.forEach(market => {
-  market.creator = creatorMap.get(market.creator_id)
-})
+# 良い例: Eager Loading（joinedload）- 1対1関係向け
+stmt = (
+    select(MarketModel)
+    .options(joinedload(MarketModel.creator))
+    .where(MarketModel.id == market_id)
+)
 ```
 
 ### トランザクションパターン
 
-```typescript
-async function createMarketWithPosition(
-  marketData: CreateMarketDto,
-  positionData: CreatePositionDto
-) {
-  // Supabaseトランザクションを使用
-  const { data, error } = await supabase.rpc('create_market_with_position', {
-    market_data: marketData,
-    position_data: positionData
-  })
+```python
+from sqlalchemy.ext.asyncio import AsyncSession
 
-  if (error) throw new Error('Transaction failed')
-  return data
-}
+async def create_market_with_position(
+    session: AsyncSession,
+    market_data: CreateMarketDto,
+    position_data: CreatePositionDto
+) -> Market:
+    """トランザクション内で複数操作を実行"""
+    try:
+        # マーケット作成
+        market = MarketModel(**market_data.model_dump())
+        session.add(market)
+        await session.flush()  # IDを取得
 
-// SupabaseのSQL関数
-CREATE OR REPLACE FUNCTION create_market_with_position(
-  market_data jsonb,
-  position_data jsonb
-)
-RETURNS jsonb
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  -- トランザクションは自動的に開始
-  INSERT INTO markets VALUES (market_data);
-  INSERT INTO positions VALUES (position_data);
-  RETURN jsonb_build_object('success', true);
-EXCEPTION
-  WHEN OTHERS THEN
-    -- ロールバックは自動的に発生
-    RETURN jsonb_build_object('success', false, 'error', SQLERRM);
-END;
-$$;
+        # ポジション作成
+        position = PositionModel(
+            market_id=market.id,
+            **position_data.model_dump()
+        )
+        session.add(position)
+
+        await session.commit()
+        await session.refresh(market)
+        return Market.model_validate(market)
+
+    except Exception:
+        await session.rollback()
+        raise
+
+
+# コンテキストマネージャーを使用
+async def transfer_funds(from_user_id: str, to_user_id: str, amount: float):
+    async with async_session_factory() as session:
+        async with session.begin():  # 自動コミット/ロールバック
+            from_user = await session.get(UserModel, from_user_id)
+            to_user = await session.get(UserModel, to_user_id)
+
+            if from_user.balance < amount:
+                raise ValueError("残高不足")
+
+            from_user.balance -= amount
+            to_user.balance += amount
 ```
 
 ## キャッシュ戦略
 
 ### Redisキャッシュ層
 
-```typescript
-class CachedMarketRepository implements MarketRepository {
-  constructor(
-    private baseRepo: MarketRepository,
-    private redis: RedisClient
-  ) {}
+```python
+import redis.asyncio as redis
+import json
+from typing import Optional, TypeVar, Callable
+from functools import wraps
 
-  async findById(id: string): Promise<Market | null> {
-    // まずキャッシュをチェック
-    const cached = await this.redis.get(`market:${id}`)
+T = TypeVar("T")
 
-    if (cached) {
-      return JSON.parse(cached)
-    }
+class CacheService:
+    def __init__(self, redis_client: redis.Redis):
+        self.redis = redis_client
 
-    // キャッシュミス - データベースから取得
-    const market = await this.baseRepo.findById(id)
+    async def get(self, key: str) -> Optional[dict]:
+        data = await self.redis.get(key)
+        return json.loads(data) if data else None
 
-    if (market) {
-      // 5分間キャッシュ
-      await this.redis.setex(`market:${id}`, 300, JSON.stringify(market))
-    }
+    async def set(self, key: str, value: dict, ttl: int = 300) -> None:
+        await self.redis.setex(key, ttl, json.dumps(value))
 
-    return market
-  }
+    async def delete(self, key: str) -> None:
+        await self.redis.delete(key)
 
-  async invalidateCache(id: string): Promise<void> {
-    await this.redis.del(`market:${id}`)
-  }
-}
+
+class CachedMarketRepository(MarketRepository):
+    def __init__(self, base_repo: MarketRepository, cache: CacheService):
+        self.base_repo = base_repo
+        self.cache = cache
+
+    async def find_by_id(self, id: str) -> Optional[Market]:
+        cache_key = f"market:{id}"
+
+        # キャッシュをチェック
+        cached = await self.cache.get(cache_key)
+        if cached:
+            return Market.model_validate(cached)
+
+        # キャッシュミス - データベースから取得
+        market = await self.base_repo.find_by_id(id)
+
+        if market:
+            await self.cache.set(cache_key, market.model_dump(), ttl=300)
+
+        return market
+
+    async def invalidate(self, id: str) -> None:
+        await self.cache.delete(f"market:{id}")
 ```
 
-### Cache-Asideパターン
+### デコレーターベースのキャッシュ
 
-```typescript
-async function getMarketWithCache(id: string): Promise<Market> {
-  const cacheKey = `market:${id}`
+```python
+from functools import wraps
+from typing import Callable, Any
 
-  // キャッシュを試行
-  const cached = await redis.get(cacheKey)
-  if (cached) return JSON.parse(cached)
+def cached(ttl: int = 300, key_prefix: str = ""):
+    """キャッシュデコレーター"""
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, **kwargs) -> Any:
+            # キャッシュキーを生成
+            cache_key = f"{key_prefix}:{func.__name__}:{hash((args, tuple(sorted(kwargs.items()))))}"
 
-  // キャッシュミス - DBから取得
-  const market = await db.markets.findUnique({ where: { id } })
+            # キャッシュをチェック
+            cached_value = await cache_service.get(cache_key)
+            if cached_value is not None:
+                return cached_value
 
-  if (!market) throw new Error('Market not found')
+            # 関数を実行
+            result = await func(*args, **kwargs)
 
-  // キャッシュを更新
-  await redis.setex(cacheKey, 300, JSON.stringify(market))
+            # 結果をキャッシュ
+            await cache_service.set(cache_key, result, ttl=ttl)
 
-  return market
-}
+            return result
+        return wrapper
+    return decorator
+
+
+# 使用例
+@cached(ttl=600, key_prefix="markets")
+async def get_popular_markets(limit: int = 10) -> list[Market]:
+    ...
 ```
 
 ## エラーハンドリングパターン
 
 ### 集中エラーハンドラー
 
-```typescript
-class ApiError extends Error {
-  constructor(
-    public statusCode: number,
-    public message: string,
-    public isOperational = true
-  ) {
-    super(message)
-    Object.setPrototypeOf(this, ApiError.prototype)
-  }
-}
+```python
+from fastapi import FastAPI, Request, HTTPException
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
+import logging
 
-export function errorHandler(error: unknown, req: Request): Response {
-  if (error instanceof ApiError) {
-    return NextResponse.json({
-      success: false,
-      error: error.message
-    }, { status: error.statusCode })
-  }
+logger = logging.getLogger(__name__)
 
-  if (error instanceof z.ZodError) {
-    return NextResponse.json({
-      success: false,
-      error: 'Validation failed',
-      details: error.errors
-    }, { status: 400 })
-  }
+class ApiError(Exception):
+    """カスタムAPIエラー"""
+    def __init__(self, status_code: int, message: str, details: dict = None):
+        self.status_code = status_code
+        self.message = message
+        self.details = details or {}
 
-  // 予期しないエラーをログ
-  console.error('Unexpected error:', error)
 
-  return NextResponse.json({
-    success: false,
-    error: 'Internal server error'
-  }, { status: 500 })
-}
+app = FastAPI()
 
-// 使用方法
-export async function GET(request: Request) {
-  try {
-    const data = await fetchData()
-    return NextResponse.json({ success: true, data })
-  } catch (error) {
-    return errorHandler(error, request)
-  }
-}
+@app.exception_handler(ApiError)
+async def api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": exc.message,
+            "details": exc.details
+        }
+    )
+
+@app.exception_handler(ValidationError)
+async def validation_error_handler(request: Request, exc: ValidationError) -> JSONResponse:
+    return JSONResponse(
+        status_code=400,
+        content={
+            "success": False,
+            "error": "検証エラー",
+            "details": exc.errors()
+        }
+    )
+
+@app.exception_handler(Exception)
+async def general_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("予期しないエラー")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "success": False,
+            "error": "内部サーバーエラー"
+        }
+    )
 ```
 
 ### 指数バックオフでのリトライ
 
-```typescript
-async function fetchWithRetry<T>(
-  fn: () => Promise<T>,
-  maxRetries = 3
-): Promise<T> {
-  let lastError: Error
+```python
+import asyncio
+from typing import TypeVar, Callable, Awaitable
 
-  for (let i = 0; i < maxRetries; i++) {
-    try {
-      return await fn()
-    } catch (error) {
-      lastError = error as Error
+T = TypeVar("T")
 
-      if (i < maxRetries - 1) {
-        // 指数バックオフ: 1秒、2秒、4秒
-        const delay = Math.pow(2, i) * 1000
-        await new Promise(resolve => setTimeout(resolve, delay))
-      }
-    }
-  }
+async def retry_with_backoff(
+    func: Callable[[], Awaitable[T]],
+    max_retries: int = 3,
+    base_delay: float = 1.0,
+    max_delay: float = 30.0
+) -> T:
+    """指数バックオフでリトライ"""
+    last_error: Exception = None
 
-  throw lastError!
-}
+    for attempt in range(max_retries):
+        try:
+            return await func()
+        except Exception as e:
+            last_error = e
 
-// 使用方法
-const data = await fetchWithRetry(() => fetchFromAPI())
+            if attempt < max_retries - 1:
+                delay = min(base_delay * (2 ** attempt), max_delay)
+                logger.warning(f"リトライ {attempt + 1}/{max_retries}、{delay}秒後...")
+                await asyncio.sleep(delay)
+
+    raise last_error
+
+
+# 使用例
+data = await retry_with_backoff(
+    lambda: fetch_from_external_api(),
+    max_retries=3
+)
 ```
 
 ## 認証・認可
 
-### JWTトークン検証
+### JWT認証
 
-```typescript
-import jwt from 'jsonwebtoken'
+```python
+from fastapi import Depends, HTTPException, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
+from pydantic import BaseModel
+from datetime import datetime, timedelta
 
-interface JWTPayload {
-  userId: string
-  email: string
-  role: 'admin' | 'user'
-}
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
-export function verifyToken(token: string): JWTPayload {
-  try {
-    const payload = jwt.verify(token, process.env.JWT_SECRET!) as JWTPayload
-    return payload
-  } catch (error) {
-    throw new ApiError(401, 'Invalid token')
-  }
-}
+class TokenPayload(BaseModel):
+    sub: str  # user_id
+    exp: datetime
+    role: str
 
-export async function requireAuth(request: Request) {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '')
+def create_access_token(user_id: str, role: str) -> str:
+    expire = datetime.utcnow() + timedelta(hours=24)
+    payload = TokenPayload(sub=user_id, exp=expire, role=role)
+    return jwt.encode(payload.model_dump(), SECRET_KEY, algorithm="HS256")
 
-  if (!token) {
-    throw new ApiError(401, 'Missing authorization token')
-  }
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: DbSession = Depends()
+) -> User:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=["HS256"])
+        token_data = TokenPayload.model_validate(payload)
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="無効なトークンです"
+        )
 
-  return verifyToken(token)
-}
+    user = await db.get(UserModel, token_data.sub)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="ユーザーが見つかりません"
+        )
 
-// APIルートでの使用
-export async function GET(request: Request) {
-  const user = await requireAuth(request)
-
-  const data = await getDataForUser(user.userId)
-
-  return NextResponse.json({ success: true, data })
-}
+    return User.model_validate(user)
 ```
 
 ### ロールベースアクセス制御
 
-```typescript
-type Permission = 'read' | 'write' | 'delete' | 'admin'
+```python
+from enum import Enum
+from typing import Callable
+from functools import wraps
 
-interface User {
-  id: string
-  role: 'admin' | 'moderator' | 'user'
+class Role(str, Enum):
+    ADMIN = "admin"
+    MODERATOR = "moderator"
+    USER = "user"
+
+ROLE_PERMISSIONS = {
+    Role.ADMIN: {"read", "write", "delete", "admin"},
+    Role.MODERATOR: {"read", "write", "delete"},
+    Role.USER: {"read", "write"}
 }
 
-const rolePermissions: Record<User['role'], Permission[]> = {
-  admin: ['read', 'write', 'delete', 'admin'],
-  moderator: ['read', 'write', 'delete'],
-  user: ['read', 'write']
-}
+def require_permission(permission: str):
+    """権限チェックデコレーター"""
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(*args, current_user: User = Depends(get_current_user), **kwargs):
+            user_permissions = ROLE_PERMISSIONS.get(current_user.role, set())
 
-export function hasPermission(user: User, permission: Permission): boolean {
-  return rolePermissions[user.role].includes(permission)
-}
+            if permission not in user_permissions:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="権限がありません"
+                )
 
-export function requirePermission(permission: Permission) {
-  return async (request: Request) => {
-    const user = await requireAuth(request)
+            return await func(*args, current_user=current_user, **kwargs)
+        return wrapper
+    return decorator
 
-    if (!hasPermission(user, permission)) {
-      throw new ApiError(403, 'Insufficient permissions')
-    }
 
-    return user
-  }
-}
-
-// 使用方法
-export const DELETE = requirePermission('delete')(async (request: Request) => {
-  // 権限チェック付きハンドラー
-})
+# 使用例
+@router.delete("/{id}")
+@require_permission("delete")
+async def delete_market(
+    id: str,
+    current_user: User = Depends(get_current_user),
+    service: MarketSvc = Depends()
+):
+    await service.delete(id)
+    return {"success": True}
 ```
 
 ## レート制限
 
-### シンプルなインメモリレート制限
+### スライディングウィンドウレート制限
 
-```typescript
-class RateLimiter {
-  private requests = new Map<string, number[]>()
+```python
+import redis.asyncio as redis
+from fastapi import Request, HTTPException
+import time
 
-  async checkLimit(
-    identifier: string,
-    maxRequests: number,
-    windowMs: number
-  ): Promise<boolean> {
-    const now = Date.now()
-    const requests = this.requests.get(identifier) || []
+class RateLimiter:
+    def __init__(self, redis_client: redis.Redis):
+        self.redis = redis_client
 
-    // ウィンドウ外の古いリクエストを削除
-    const recentRequests = requests.filter(time => now - time < windowMs)
+    async def check_limit(
+        self,
+        identifier: str,
+        max_requests: int,
+        window_seconds: int
+    ) -> bool:
+        """スライディングウィンドウでレート制限をチェック"""
+        now = time.time()
+        key = f"rate_limit:{identifier}"
 
-    if (recentRequests.length >= maxRequests) {
-      return false  // レート制限を超過
-    }
+        async with self.redis.pipeline() as pipe:
+            # 古いエントリを削除
+            pipe.zremrangebyscore(key, 0, now - window_seconds)
+            # 現在のカウントを取得
+            pipe.zcard(key)
+            # 新しいリクエストを追加
+            pipe.zadd(key, {str(now): now})
+            # TTLを設定
+            pipe.expire(key, window_seconds)
 
-    // 現在のリクエストを追加
-    recentRequests.push(now)
-    this.requests.set(identifier, recentRequests)
+            results = await pipe.execute()
 
-    return true
-  }
-}
+        current_count = results[1]
+        return current_count < max_requests
 
-const limiter = new RateLimiter()
 
-export async function GET(request: Request) {
-  const ip = request.headers.get('x-forwarded-for') || 'unknown'
+# FastAPI依存性として使用
+async def rate_limit_dependency(
+    request: Request,
+    limiter: RateLimiter = Depends(get_rate_limiter)
+):
+    client_ip = request.client.host
+    allowed = await limiter.check_limit(client_ip, max_requests=100, window_seconds=60)
 
-  const allowed = await limiter.checkLimit(ip, 100, 60000)  // 100リクエスト/分
+    if not allowed:
+        raise HTTPException(
+            status_code=429,
+            detail="リクエストが多すぎます。しばらくお待ちください。"
+        )
 
-  if (!allowed) {
-    return NextResponse.json({
-      error: 'Rate limit exceeded'
-    }, { status: 429 })
-  }
 
-  // リクエストを続行
-}
+# ルートに適用
+@router.get("/", dependencies=[Depends(rate_limit_dependency)])
+async def list_markets():
+    ...
 ```
 
-## バックグラウンドジョブ・キュー
+## バックグラウンドタスク
 
-### シンプルなキューパターン
+### FastAPIバックグラウンドタスク
 
-```typescript
-class JobQueue<T> {
-  private queue: T[] = []
-  private processing = false
+```python
+from fastapi import BackgroundTasks
 
-  async add(job: T): Promise<void> {
-    this.queue.push(job)
+async def send_notification(user_id: str, message: str):
+    """非同期で通知を送信"""
+    # 通知ロジック
+    ...
 
-    if (!this.processing) {
-      this.process()
+@router.post("/markets")
+async def create_market(
+    market: CreateMarketSchema,
+    background_tasks: BackgroundTasks,
+    service: MarketSvc
+) -> MarketResponse:
+    new_market = await service.create(market)
+
+    # バックグラウンドで通知
+    background_tasks.add_task(
+        send_notification,
+        user_id=new_market.creator_id,
+        message=f"マーケット「{new_market.name}」が作成されました"
+    )
+
+    return MarketResponse.model_validate(new_market)
+```
+
+### Celeryタスクキュー
+
+```python
+from celery import Celery
+
+celery_app = Celery(
+    "tasks",
+    broker="redis://localhost:6379/0",
+    backend="redis://localhost:6379/1"
+)
+
+@celery_app.task
+def process_market_data(market_id: str):
+    """重い処理をバックグラウンドで実行"""
+    # 処理ロジック
+    ...
+
+@celery_app.task
+def generate_report(user_id: str, report_type: str):
+    """レポート生成"""
+    ...
+
+
+# FastAPIから呼び出し
+@router.post("/markets/{id}/process")
+async def trigger_processing(id: str):
+    task = process_market_data.delay(id)
+    return {"task_id": task.id, "status": "processing"}
+
+
+@router.get("/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    task = celery_app.AsyncResult(task_id)
+    return {
+        "task_id": task_id,
+        "status": task.status,
+        "result": task.result if task.ready() else None
     }
-  }
-
-  private async process(): Promise<void> {
-    this.processing = true
-
-    while (this.queue.length > 0) {
-      const job = this.queue.shift()!
-
-      try {
-        await this.execute(job)
-      } catch (error) {
-        console.error('Job failed:', error)
-      }
-    }
-
-    this.processing = false
-  }
-
-  private async execute(job: T): Promise<void> {
-    // ジョブ実行ロジック
-  }
-}
-
-// マーケットインデックス化での使用
-interface IndexJob {
-  marketId: string
-}
-
-const indexQueue = new JobQueue<IndexJob>()
-
-export async function POST(request: Request) {
-  const { marketId } = await request.json()
-
-  // ブロックする代わりにキューに追加
-  await indexQueue.add({ marketId })
-
-  return NextResponse.json({ success: true, message: 'Job queued' })
-}
 ```
 
 ## ログ・監視
 
 ### 構造化ログ
 
-```typescript
-interface LogContext {
-  userId?: string
-  requestId?: string
-  method?: string
-  path?: string
-  [key: string]: unknown
-}
+```python
+import logging
+import json
+from datetime import datetime
+from typing import Any
 
-class Logger {
-  log(level: 'info' | 'warn' | 'error', message: string, context?: LogContext) {
-    const entry = {
-      timestamp: new Date().toISOString(),
-      level,
-      message,
-      ...context
-    }
+class StructuredFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        log_entry = {
+            "timestamp": datetime.utcnow().isoformat(),
+            "level": record.levelname,
+            "message": record.getMessage(),
+            "module": record.module,
+            "function": record.funcName,
+            "line": record.lineno
+        }
 
-    console.log(JSON.stringify(entry))
-  }
+        # 追加コンテキストを含める
+        if hasattr(record, "context"):
+            log_entry["context"] = record.context
 
-  info(message: string, context?: LogContext) {
-    this.log('info', message, context)
-  }
+        return json.dumps(log_entry)
 
-  warn(message: string, context?: LogContext) {
-    this.log('warn', message, context)
-  }
 
-  error(message: string, error: Error, context?: LogContext) {
-    this.log('error', message, {
-      ...context,
-      error: error.message,
-      stack: error.stack
-    })
-  }
-}
+# ロガー設定
+def setup_logging():
+    handler = logging.StreamHandler()
+    handler.setFormatter(StructuredFormatter())
 
-const logger = new Logger()
+    logger = logging.getLogger()
+    logger.addHandler(handler)
+    logger.setLevel(logging.INFO)
 
-// 使用方法
-export async function GET(request: Request) {
-  const requestId = crypto.randomUUID()
 
-  logger.info('Fetching markets', {
-    requestId,
-    method: 'GET',
-    path: '/api/markets'
-  })
+# 使用例
+logger = logging.getLogger(__name__)
 
-  try {
-    const markets = await fetchMarkets()
-    return NextResponse.json({ success: true, data: markets })
-  } catch (error) {
-    logger.error('Failed to fetch markets', error as Error, { requestId })
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
-  }
-}
+async def process_request(request_id: str):
+    logger.info(
+        "リクエストを処理中",
+        extra={"context": {"request_id": request_id, "user_id": "123"}}
+    )
+```
+
+### リクエストログミドルウェア
+
+```python
+import uuid
+import time
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        request_id = str(uuid.uuid4())
+        request.state.request_id = request_id
+
+        start_time = time.perf_counter()
+
+        logger.info(
+            "リクエスト開始",
+            extra={
+                "context": {
+                    "request_id": request_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "client_ip": request.client.host
+                }
+            }
+        )
+
+        response = await call_next(request)
+
+        process_time = time.perf_counter() - start_time
+
+        logger.info(
+            "リクエスト完了",
+            extra={
+                "context": {
+                    "request_id": request_id,
+                    "status_code": response.status_code,
+                    "process_time_ms": round(process_time * 1000, 2)
+                }
+            }
+        )
+
+        response.headers["X-Request-ID"] = request_id
+        return response
 ```
 
 **覚えておくこと**: バックエンドパターンはスケーラブルで保守可能なサーバーサイドアプリケーションを可能にします。複雑さのレベルに適したパターンを選択してください。

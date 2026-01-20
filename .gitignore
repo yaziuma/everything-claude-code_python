@@ -1,27 +1,29 @@
-# 環境ファイル
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+coverage/
+.coverage
+htmlcov/
+
+# Environment (uv creates .venv by default)
+.venv/
+venv/
+env/
+
+# Environment Variables
 .env
-.env.local
 .env.*.local
 
-# APIキー
-*.key
-*.pem
-secrets.json
-
-# OSファイル
-.DS_Store
-Thumbs.db
-
-# エディタファイル
-.idea/
+# IDE
 .vscode/
-*.swp
-*.swo
+.idea/
 
-# Node
-node_modules/
+# OS
+.DS_Store
 
-# 個人設定（もしあれば）
-personal/
-private/
-*.Identifier
+# Note: uv.lock SHOULD be committed to git (like package-lock.json)
+*:Zone.Identifier
+

@@ -50,9 +50,10 @@ model: opus
 - 深いネスト（4レベル超）
 - エラーハンドリングの不足（try/except）
 - print文（本番コードに残っている）
-- ミューテーションパターン（不変性を優先）
+- 共有状態の不用意なミューテーション
 - 新しいコードのテスト不足
 - 型注釈の不足
+- 循環インポートの可能性
 
 ## パフォーマンス（中）
 
@@ -97,7 +98,7 @@ api_key = os.environ["API_KEY"]  # ✓ 良い
 ここにプロジェクト固有のチェックを追加。例：
 - 多くの小さなファイル原則に従う（200-400行が典型、800行まで）
 - コードベースに絵文字なし
-- 不変性パターンを使用
+- 不変性パターンを使用（特にモデル）
 - Pydanticでバリデーション
 - SQLAlchemy ORMでクエリ（生SQLなし）
 - FastAPI依存性注入を使用
@@ -163,6 +164,20 @@ class UserCreate(BaseModel):
 @app.post("/users")
 def create_user(user: UserCreate):
     ...
+```
+
+### 循環インポートチェック
+```python
+# ❌ 悪い：トップレベルでの相互インポート
+# user.py
+from .post import Post
+# post.py
+from .user import User
+
+# ✓ 良い：TYPE_CHECKINGの使用
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from .post import Post
 ```
 
 プロジェクトの`CLAUDE.md`やスキルファイルに基づいてカスタマイズ。
