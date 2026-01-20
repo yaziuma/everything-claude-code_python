@@ -1,11 +1,11 @@
 ---
 name: coding-standards
-description: TypeScript、JavaScript、React、Node.js開発のための汎用コーディング標準、ベストプラクティス、パターン。
+description: Python、FastAPI、SQLAlchemy開発のための汎用コーディング標準、ベストプラクティス、パターン。
 ---
 
 # コーディング標準・ベストプラクティス
 
-すべてのプロジェクトに適用可能な汎用コーディング標準。
+すべてのPythonプロジェクトに適用可能な汎用コーディング標準。
 
 ## コード品質原則
 
@@ -13,7 +13,7 @@ description: TypeScript、JavaScript、React、Node.js開発のための汎用�
 - コードは書くより読まれることが多い
 - 明確な変数と関数名
 - コメントよりも自己文書化コードを優先
-- 一貫したフォーマット
+- 一貫したフォーマット（Ruffで自動化）
 
 ### 2. KISS（Keep It Simple, Stupid）
 - 動作する最もシンプルなソリューション
@@ -23,7 +23,7 @@ description: TypeScript、JavaScript、React、Node.js開発のための汎用�
 
 ### 3. DRY（Don't Repeat Yourself）
 - 共通ロジックを関数に抽出
-- 再利用可能なコンポーネントを作成
+- 再利用可能なモジュールを作成
 - モジュール間でユーティリティを共有
 - コピー&ペーストプログラミングを避ける
 
@@ -33,196 +33,185 @@ description: TypeScript、JavaScript、React、Node.js開発のための汎用�
 - 必要な時のみ複雑性を追加
 - シンプルに始めて、必要時にリファクタリング
 
-## TypeScript/JavaScript標準
+## Python標準
 
 ### 変数命名
 
-```typescript
-// ✅ 良い：説明的な名前
-const marketSearchQuery = 'election'
-const isUserAuthenticated = true
-const totalRevenue = 1000
+```python
+# 良い：説明的な名前（snake_case）
+market_search_query = "election"
+is_user_authenticated = True
+total_revenue = 1000
 
-// ❌ 悪い：不明確な名前
-const q = 'election'
-const flag = true
-const x = 1000
+# 悪い：不明確な名前
+q = "election"
+flag = True
+x = 1000
 ```
 
 ### 関数命名
 
-```typescript
-// ✅ 良い：動詞-名詞パターン
-async function fetchMarketData(marketId: string) { }
-function calculateSimilarity(a: number[], b: number[]) { }
-function isValidEmail(email: string): boolean { }
+```python
+# 良い：動詞-名詞パターン（snake_case）
+async def fetch_market_data(market_id: str) -> Market:
+    ...
 
-// ❌ 悪い：不明確または名詞のみ
-async function market(id: string) { }
-function similarity(a, b) { }
-function email(e) { }
+def calculate_similarity(a: list[float], b: list[float]) -> float:
+    ...
+
+def is_valid_email(email: str) -> bool:
+    ...
+
+# 悪い：不明確または名詞のみ
+async def market(id):
+    ...
+
+def similarity(a, b):
+    ...
+
+def email(e):
+    ...
 ```
 
 ### 不変性パターン（重要）
 
-```typescript
-// ✅ 常にスプレッド演算子を使用
-const updatedUser = {
-  ...user,
-  name: 'New Name'
-}
+```python
+# 良い：新しいオブジェクトを作成
+updated_user = user.model_copy(update={"name": "New Name"})
 
-const updatedArray = [...items, newItem]
+updated_list = [*items, new_item]
 
-// ❌ 決して直接ミューテートしない
-user.name = 'New Name'  // 悪い
-items.push(newItem)     // 悪い
+# 辞書の不変更新
+updated_dict = {**original_dict, "key": "new_value"}
+
+# 悪い：直接ミューテート
+user.name = "New Name"  # 避ける
+items.append(new_item)  # 状況による
 ```
 
 ### エラーハンドリング
 
-```typescript
-// ✅ 良い：包括的なエラーハンドリング
-async function fetchData(url: string) {
-  try {
-    const response = await fetch(url)
+```python
+from httpx import HTTPStatusError
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`)
-    }
+# 良い：包括的なエラーハンドリング
+async def fetch_data(url: str) -> dict:
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get(url)
+            response.raise_for_status()
+            return response.json()
+    except HTTPStatusError as e:
+        logger.error(f"HTTP error: {e.response.status_code}")
+        raise ValueError(f"データの取得に失敗しました: {e}")
+    except Exception as e:
+        logger.error(f"フェッチが失敗しました: {e}")
+        raise
 
-    return await response.json()
-  } catch (error) {
-    console.error('フェッチが失敗しました:', error)
-    throw new Error('データの取得に失敗しました')
-  }
-}
-
-// ❌ 悪い：エラーハンドリングなし
-async function fetchData(url) {
-  const response = await fetch(url)
-  return response.json()
-}
+# 悪い：エラーハンドリングなし
+async def fetch_data(url: str):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return response.json()
 ```
 
 ### Async/Awaitベストプラクティス
 
-```typescript
-// ✅ 良い：可能な場合は並列実行
-const [users, markets, stats] = await Promise.all([
-  fetchUsers(),
-  fetchMarkets(),
-  fetchStats()
-])
+```python
+import asyncio
 
-// ❌ 悪い：不要な逐次実行
-const users = await fetchUsers()
-const markets = await fetchMarkets()
-const stats = await fetchStats()
+# 良い：可能な場合は並列実行
+users, markets, stats = await asyncio.gather(
+    fetch_users(),
+    fetch_markets(),
+    fetch_stats()
+)
+
+# 悪い：不要な逐次実行
+users = await fetch_users()
+markets = await fetch_markets()
+stats = await fetch_stats()
 ```
 
 ### 型安全性
 
-```typescript
-// ✅ 良い：適切な型
-interface Market {
-  id: string
-  name: string
-  status: 'active' | 'resolved' | 'closed'
-  created_at: Date
-}
+```python
+from pydantic import BaseModel
+from typing import Literal
+from datetime import datetime
 
-function getMarket(id: string): Promise<Market> {
-  // 実装
-}
+# 良い：適切な型（Pydanticモデル）
+class Market(BaseModel):
+    id: str
+    name: str
+    status: Literal["active", "resolved", "closed"]
+    created_at: datetime
 
-// ❌ 悪い：'any'を使用
-function getMarket(id: any): Promise<any> {
-  // 実装
-}
+def get_market(id: str) -> Market:
+    ...
+
+# 悪い：Anyを使用
+def get_market(id) -> dict:
+    ...
 ```
 
-## Reactベストプラクティス
+## FastAPIベストプラクティス
 
-### コンポーネント構造
+### ルートハンドラー構造
 
-```typescript
-// ✅ 良い：型付き関数コンポーネント
-interface ButtonProps {
-  children: React.ReactNode
-  onClick: () => void
-  disabled?: boolean
-  variant?: 'primary' | 'secondary'
-}
+```python
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 
-export function Button({
-  children,
-  onClick,
-  disabled = false,
-  variant = 'primary'
-}: ButtonProps) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`btn btn-${variant}`}
-    >
-      {children}
-    </button>
-  )
-}
+router = APIRouter(prefix="/api/markets", tags=["markets"])
 
-// ❌ 悪い：型なし、不明確な構造
-export function Button(props) {
-  return <button onClick={props.onClick}>{props.children}</button>
-}
+class MarketCreate(BaseModel):
+    name: str
+    description: str
+
+class MarketResponse(BaseModel):
+    id: str
+    name: str
+    description: str
+
+@router.post("/", response_model=MarketResponse, status_code=status.HTTP_201_CREATED)
+async def create_market(
+    market: MarketCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+) -> MarketResponse:
+    """マーケットを作成する"""
+    new_market = await market_service.create(db, market, current_user.id)
+    return MarketResponse.model_validate(new_market)
 ```
 
-### カスタムフック
+### 依存性注入
 
-```typescript
-// ✅ 良い：再利用可能なカスタムフック
-export function useDebounce<T>(value: T, delay: number): T {
-  const [debouncedValue, setDebouncedValue] = useState<T>(value)
+```python
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Annotated
 
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedValue(value)
-    }, delay)
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session() as session:
+        yield session
 
-    return () => clearTimeout(handler)
-  }, [value, delay])
+async def get_current_user(
+    token: str = Depends(oauth2_scheme),
+    db: AsyncSession = Depends(get_db)
+) -> User:
+    user = await verify_token(token, db)
+    if not user:
+        raise HTTPException(status_code=401, detail="認証が必要です")
+    return user
 
-  return debouncedValue
-}
+# 型エイリアスで簡潔に
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
 
-// 使用法
-const debouncedQuery = useDebounce(searchQuery, 500)
-```
-
-### 状態管理
-
-```typescript
-// ✅ 良い：適切な状態更新
-const [count, setCount] = useState(0)
-
-// 前の状態に基づく関数的更新
-setCount(prev => prev + 1)
-
-// ❌ 悪い：直接状態参照
-setCount(count + 1)  // 非同期シナリオで古くなる可能性
-```
-
-### 条件レンダリング
-
-```typescript
-// ✅ 良い：明確な条件レンダリング
-{isLoading && <Spinner />}
-{error && <ErrorMessage error={error} />}
-{data && <DataDisplay data={data} />}
-
-// ❌ 悪い：三項演算子地獄
-{isLoading ? <Spinner /> : error ? <ErrorMessage error={error} /> : data ? <DataDisplay data={data} /> : null}
+@router.get("/me")
+async def get_me(db: DbSession, user: CurrentUser) -> UserResponse:
+    return UserResponse.model_validate(user)
 ```
 
 ## API設計標準
@@ -231,11 +220,11 @@ setCount(count + 1)  // 非同期シナリオで古くなる可能性
 
 ```
 GET    /api/markets              # すべてのマーケットをリスト
-GET    /api/markets/:id          # 特定のマーケットを取得
+GET    /api/markets/{id}         # 特定のマーケットを取得
 POST   /api/markets              # 新しいマーケットを作成
-PUT    /api/markets/:id          # マーケットを更新（完全）
-PATCH  /api/markets/:id          # マーケットを更新（部分）
-DELETE /api/markets/:id          # マーケットを削除
+PUT    /api/markets/{id}         # マーケットを更新（完全）
+PATCH  /api/markets/{id}         # マーケットを更新（部分）
+DELETE /api/markets/{id}         # マーケットを削除
 
 # フィルタリング用クエリパラメータ
 GET /api/markets?status=active&limit=10&offset=0
@@ -243,62 +232,68 @@ GET /api/markets?status=active&limit=10&offset=0
 
 ### レスポンス形式
 
-```typescript
-// ✅ 良い：一貫したレスポンス構造
-interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  error?: string
-  meta?: {
-    total: number
-    page: number
-    limit: number
-  }
-}
+```python
+from pydantic import BaseModel
+from typing import Generic, TypeVar, Optional
 
-// 成功レスポンス
-return NextResponse.json({
-  success: true,
-  data: markets,
-  meta: { total: 100, page: 1, limit: 10 }
-})
+T = TypeVar("T")
 
-// エラーレスポンス
-return NextResponse.json({
-  success: false,
-  error: '無効なリクエスト'
-}, { status: 400 })
+class ApiResponse(BaseModel, Generic[T]):
+    success: bool
+    data: Optional[T] = None
+    error: Optional[str] = None
+    meta: Optional[dict] = None
+
+# 成功レスポンス
+@router.get("/markets")
+async def get_markets(db: DbSession) -> ApiResponse[list[Market]]:
+    markets = await market_service.get_all(db)
+    return ApiResponse(
+        success=True,
+        data=markets,
+        meta={"total": len(markets), "page": 1, "limit": 10}
+    )
+
+# エラーレスポンス
+@router.get("/markets/{id}")
+async def get_market(id: str, db: DbSession) -> ApiResponse[Market]:
+    market = await market_service.get_by_id(db, id)
+    if not market:
+        raise HTTPException(
+            status_code=404,
+            detail="マーケットが見つかりません"
+        )
+    return ApiResponse(success=True, data=market)
 ```
 
 ### 入力検証
 
-```typescript
-import { z } from 'zod'
+```python
+from pydantic import BaseModel, Field, field_validator
+from datetime import datetime
 
-// ✅ 良い：スキーマ検証
-const CreateMarketSchema = z.object({
-  name: z.string().min(1).max(200),
-  description: z.string().min(1).max(2000),
-  endDate: z.string().datetime(),
-  categories: z.array(z.string()).min(1)
-})
+# 良い：スキーマ検証
+class CreateMarketSchema(BaseModel):
+    name: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(..., min_length=1, max_length=2000)
+    end_date: datetime
+    categories: list[str] = Field(..., min_length=1)
 
-export async function POST(request: Request) {
-  const body = await request.json()
+    @field_validator("categories")
+    @classmethod
+    def validate_categories(cls, v: list[str]) -> list[str]:
+        if len(v) > 10:
+            raise ValueError("カテゴリは最大10個まで")
+        return v
 
-  try {
-    const validated = CreateMarketSchema.parse(body)
-    // 検証されたデータで続行
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return NextResponse.json({
-        success: false,
-        error: '検証に失敗しました',
-        details: error.errors
-      }, { status: 400 })
-    }
-  }
-}
+@router.post("/markets")
+async def create_market(
+    market: CreateMarketSchema,
+    db: DbSession
+) -> ApiResponse[Market]:
+    # Pydanticが自動的に検証
+    result = await market_service.create(db, market)
+    return ApiResponse(success=True, data=result)
 ```
 
 ## ファイル構成
@@ -306,157 +301,187 @@ export async function POST(request: Request) {
 ### プロジェクト構造
 
 ```
-src/
-├── app/                    # Next.js App Router
-│   ├── api/               # APIルート
-│   ├── markets/           # マーケットページ
-│   └── (auth)/           # 認証ページ（ルートグループ）
-├── components/            # Reactコンポーネント
-│   ├── ui/               # 汎用UIコンポーネント
-│   ├── forms/            # フォームコンポーネント
-│   └── layouts/          # レイアウトコンポーネント
-├── hooks/                # カスタムReactフック
-├── lib/                  # ユーティリティと設定
-│   ├── api/             # APIクライアント
-│   ├── utils/           # ヘルパー関数
-│   └── constants/       # 定数
-├── types/                # TypeScript型
-└── styles/              # グローバルスタイル
+project/
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # FastAPIアプリケーション
+│   ├── config.py            # 設定
+│   ├── database.py          # データベース接続
+│   ├── api/                  # APIルーター
+│   │   ├── __init__.py
+│   │   ├── markets.py
+│   │   ├── users.py
+│   │   └── auth.py
+│   ├── models/              # SQLAlchemyモデル
+│   │   ├── __init__.py
+│   │   ├── market.py
+│   │   └── user.py
+│   ├── schemas/             # Pydanticスキーマ
+│   │   ├── __init__.py
+│   │   ├── market.py
+│   │   └── user.py
+│   ├── services/            # ビジネスロジック
+│   │   ├── __init__.py
+│   │   ├── market_service.py
+│   │   └── user_service.py
+│   └── utils/               # ヘルパー関数
+│       ├── __init__.py
+│       └── helpers.py
+├── templates/               # Jinja2テンプレート
+├── static/                  # 静的ファイル
+├── tests/                   # テスト
+├── alembic/                 # マイグレーション
+├── pyproject.toml
+└── .env.example
 ```
 
 ### ファイル命名
 
 ```
-components/Button.tsx          # コンポーネントはPascalCase
-hooks/useAuth.ts              # 'use'プレフィックス付きcamelCase
-lib/formatDate.ts             # ユーティリティはcamelCase
-types/market.types.ts         # .types接尾辞付きcamelCase
+app/api/markets.py           # モジュールはsnake_case
+app/models/market.py         # 単数形
+app/schemas/market.py        # 対応するスキーマ
+app/services/market_service.py  # サービス層
+tests/test_markets.py        # test_プレフィックス
 ```
 
 ## コメント・ドキュメント
 
 ### コメントするタイミング
 
-```typescript
-// ✅ 良い：なぜを説明、何をではない
-// 停止中のAPIを圧迫しないよう指数バックオフを使用
-const delay = Math.min(1000 * Math.pow(2, retryCount), 30000)
+```python
+# 良い：なぜを説明、何をではない
+# 停止中のAPIを圧迫しないよう指数バックオフを使用
+delay = min(1000 * (2 ** retry_count), 30000)
 
-// 大きな配列でのパフォーマンスのため意図的にミューテーションを使用
-items.push(newItem)
+# パフォーマンスのため意図的にリスト内包表記を避ける
+for item in large_dataset:
+    process(item)
 
-// ❌ 悪い：明らかなことを述べる
-// カウンターを1増加
-count++
+# 悪い：明らかなことを述べる
+# カウンターを1増加
+count += 1
 
-// 名前をユーザーの名前に設定
+# 名前をユーザーの名前に設定
 name = user.name
 ```
 
-### パブリックAPIのJSDoc
+### パブリックAPIのDocstring
 
-```typescript
-/**
- * セマンティック類似性を使用してマーケットを検索。
- *
- * @param query - 自然言語検索クエリ
- * @param limit - 結果の最大数（デフォルト：10）
- * @returns 類似度スコアでソートされたマーケット配列
- * @throws {Error} OpenAI APIが失敗またはRedis利用不可の場合
- *
- * @example
- * ```typescript
- * const results = await searchMarkets('election', 5)
- * console.log(results[0].name) // "Trump vs Biden"
- * ```
- */
-export async function searchMarkets(
-  query: string,
-  limit: number = 10
-): Promise<Market[]> {
-  // 実装
-}
+```python
+async def search_markets(
+    query: str,
+    limit: int = 10
+) -> list[Market]:
+    """セマンティック類似性を使用してマーケットを検索。
+
+    Args:
+        query: 自然言語検索クエリ
+        limit: 結果の最大数（デフォルト：10）
+
+    Returns:
+        類似度スコアでソートされたマーケットリスト
+
+    Raises:
+        ValueError: OpenAI APIが失敗またはRedis利用不可の場合
+
+    Example:
+        >>> results = await search_markets("election", 5)
+        >>> print(results[0].name)
+        "Trump vs Biden"
+    """
+    ...
 ```
 
 ## パフォーマンスベストプラクティス
 
-### メモ化
+### キャッシング
 
-```typescript
-import { useMemo, useCallback } from 'react'
+```python
+from functools import lru_cache
+from cachetools import TTLCache
 
-// ✅ 良い：高コストな計算をメモ化
-const sortedMarkets = useMemo(() => {
-  return markets.sort((a, b) => b.volume - a.volume)
-}, [markets])
+# 設定のキャッシュ
+@lru_cache
+def get_settings() -> Settings:
+    return Settings()
 
-// ✅ 良い：コールバックをメモ化
-const handleSearch = useCallback((query: string) => {
-  setSearchQuery(query)
-}, [])
-```
+# TTL付きキャッシュ
+cache = TTLCache(maxsize=100, ttl=300)  # 5分
 
-### 遅延読み込み
+async def get_market_with_cache(market_id: str) -> Market:
+    if market_id in cache:
+        return cache[market_id]
 
-```typescript
-import { lazy, Suspense } from 'react'
-
-// ✅ 良い：重いコンポーネントを遅延読み込み
-const HeavyChart = lazy(() => import('./HeavyChart'))
-
-export function Dashboard() {
-  return (
-    <Suspense fallback={<Spinner />}>
-      <HeavyChart />
-    </Suspense>
-  )
-}
+    market = await fetch_market(market_id)
+    cache[market_id] = market
+    return market
 ```
 
 ### データベースクエリ
 
-```typescript
-// ✅ 良い：必要な列のみ選択
-const { data } = await supabase
-  .from('markets')
-  .select('id, name, status')
-  .limit(10)
+```python
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
-// ❌ 悪い：すべてを選択
-const { data } = await supabase
-  .from('markets')
-  .select('*')
+# 良い：必要な列のみ選択
+stmt = (
+    select(Market.id, Market.name, Market.status)
+    .where(Market.status == "active")
+    .order_by(Market.volume.desc())
+    .limit(10)
+)
+result = await session.execute(stmt)
+
+# 良い：N+1問題を避けるためeager loading
+stmt = (
+    select(Market)
+    .options(selectinload(Market.creator))
+    .where(Market.id == market_id)
+)
+
+# 悪い：すべてを選択
+stmt = select(Market)
 ```
 
 ## テスト標準
 
 ### テスト構造（AAAパターン）
 
-```typescript
-test('類似度を正しく計算する', () => {
-  // Arrange（準備）
-  const vector1 = [1, 0, 0]
-  const vector2 = [0, 1, 0]
+```python
+import pytest
 
-  // Act（実行）
-  const similarity = calculateCosineSimilarity(vector1, vector2)
+def test_calculate_similarity():
+    # Arrange（準備）
+    vector1 = [1, 0, 0]
+    vector2 = [0, 1, 0]
 
-  // Assert（検証）
-  expect(similarity).toBe(0)
-})
+    # Act（実行）
+    similarity = calculate_cosine_similarity(vector1, vector2)
+
+    # Assert（検証）
+    assert similarity == 0
 ```
 
 ### テスト命名
 
-```typescript
-// ✅ 良い：説明的なテスト名
-test('クエリにマッチするマーケットがない場合は空配列を返す', () => { })
-test('OpenAI APIキーが不足している場合はエラーを投げる', () => { })
-test('Redis利用不可時は部分文字列検索にフォールバック', () => { })
+```python
+# 良い：説明的なテスト名
+def test_returns_empty_list_when_no_markets_match_query():
+    ...
 
-// ❌ 悪い：曖昧なテスト名
-test('動作する', () => { })
-test('検索をテスト', () => { })
+def test_raises_error_when_api_key_missing():
+    ...
+
+def test_falls_back_to_substring_search_when_redis_unavailable():
+    ...
+
+# 悪い：曖昧なテスト名
+def test_works():
+    ...
+
+def test_search():
+    ...
 ```
 
 ## コードの臭い検出
@@ -464,57 +489,59 @@ test('検索をテスト', () => { })
 以下のアンチパターンに注意：
 
 ### 1. 長い関数
-```typescript
-// ❌ 悪い：50行超の関数
-function processMarketData() {
-  // 100行のコード
-}
+```python
+# 悪い：50行超の関数
+def process_market_data():
+    # 100行のコード
+    ...
 
-// ✅ 良い：小さな関数に分割
-function processMarketData() {
-  const validated = validateData()
-  const transformed = transformData(validated)
-  return saveData(transformed)
-}
+# 良い：小さな関数に分割
+def process_market_data():
+    validated = validate_data()
+    transformed = transform_data(validated)
+    return save_data(transformed)
 ```
 
 ### 2. 深いネスト
-```typescript
-// ❌ 悪い：5レベル以上のネスト
-if (user) {
-  if (user.isAdmin) {
-    if (market) {
-      if (market.isActive) {
-        if (hasPermission) {
-          // 何かを実行
-        }
-      }
-    }
-  }
-}
+```python
+# 悪い：5レベル以上のネスト
+if user:
+    if user.is_admin:
+        if market:
+            if market.is_active:
+                if has_permission:
+                    # 何かを実行
+                    ...
 
-// ✅ 良い：早期リターン
-if (!user) return
-if (!user.isAdmin) return
-if (!market) return
-if (!market.isActive) return
-if (!hasPermission) return
+# 良い：早期リターン
+if not user:
+    return
+if not user.is_admin:
+    return
+if not market:
+    return
+if not market.is_active:
+    return
+if not has_permission:
+    return
 
-// 何かを実行
+# 何かを実行
 ```
 
 ### 3. マジックナンバー
-```typescript
-// ❌ 悪い：説明のない数値
-if (retryCount > 3) { }
-setTimeout(callback, 500)
+```python
+# 悪い：説明のない数値
+if retry_count > 3:
+    ...
+await asyncio.sleep(0.5)
 
-// ✅ 良い：名前付き定数
-const MAX_RETRIES = 3
-const DEBOUNCE_DELAY_MS = 500
+# 良い：名前付き定数
+MAX_RETRIES = 3
+DEBOUNCE_DELAY_SECONDS = 0.5
 
-if (retryCount > MAX_RETRIES) { }
-setTimeout(callback, DEBOUNCE_DELAY_MS)
+if retry_count > MAX_RETRIES:
+    ...
+await asyncio.sleep(DEBOUNCE_DELAY_SECONDS)
 ```
 
 **覚えておいてください**：コード品質は交渉の余地がありません。明確で保守可能なコードは迅速な開発と自信を持ったリファクタリングを可能にします。

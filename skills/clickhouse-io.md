@@ -18,6 +18,58 @@ ClickHouseは、オンライン分析処理（OLAP）のための列指向デー
 - 分散クエリ
 - リアルタイム分析
 
+## Pythonクライアント設定
+
+### clickhouse-connectの使用
+
+```python
+import clickhouse_connect
+from clickhouse_connect.driver import Client
+
+def get_clickhouse_client() -> Client:
+    """ClickHouseクライアントを取得"""
+    return clickhouse_connect.get_client(
+        host=os.environ.get("CLICKHOUSE_HOST", "localhost"),
+        port=int(os.environ.get("CLICKHOUSE_PORT", 8123)),
+        username=os.environ.get("CLICKHOUSE_USER", "default"),
+        password=os.environ.get("CLICKHOUSE_PASSWORD", ""),
+        database=os.environ.get("CLICKHOUSE_DATABASE", "default")
+    )
+
+# 使用例
+client = get_clickhouse_client()
+result = client.query("SELECT * FROM markets_analytics LIMIT 10")
+for row in result.result_rows:
+    print(row)
+```
+
+### 非同期クライアント（aiochclient）
+
+```python
+from aiochclient import ChClient
+from aiohttp import ClientSession
+
+async def get_async_client() -> ChClient:
+    """非同期ClickHouseクライアントを取得"""
+    session = ClientSession()
+    return ChClient(
+        session,
+        url=f"http://{os.environ['CLICKHOUSE_HOST']}:8123",
+        user=os.environ.get("CLICKHOUSE_USER", "default"),
+        password=os.environ.get("CLICKHOUSE_PASSWORD", ""),
+        database=os.environ.get("CLICKHOUSE_DATABASE", "default")
+    )
+
+# 使用例
+async def fetch_markets():
+    async with ClientSession() as session:
+        client = ChClient(session)
+        result = await client.fetch(
+            "SELECT * FROM markets_analytics WHERE date >= today() - 7"
+        )
+        return result
+```
+
 ## テーブル設計パターン
 
 ### MergeTreeエンジン（最も一般的）
@@ -41,7 +93,7 @@ SETTINGS index_granularity = 8192;
 ### ReplacingMergeTree（重複排除）
 
 ```sql
--- 重複の可能性があるデータ用（例：複数のソースから）
+-- 重複の可能性があるデータ用
 CREATE TABLE user_events (
     event_id String,
     user_id String,
@@ -86,7 +138,7 @@ ORDER BY hour DESC;
 ### 効率的なフィルタリング
 
 ```sql
--- ✅ 良い例: インデックス列を最初に使用
+-- 良い例: インデックス列を最初に使用
 SELECT *
 FROM markets_analytics
 WHERE date >= '2025-01-01'
@@ -95,7 +147,7 @@ WHERE date >= '2025-01-01'
 ORDER BY date DESC
 LIMIT 100;
 
--- ❌ 悪い例: 非インデックス列を最初にフィルタ
+-- 悪い例: 非インデックス列を最初にフィルタ
 SELECT *
 FROM markets_analytics
 WHERE volume > 1000
@@ -106,7 +158,7 @@ WHERE volume > 1000
 ### 集計
 
 ```sql
--- ✅ 良い例: ClickHouse固有の集計関数を使用
+-- 良い例: ClickHouse固有の集計関数を使用
 SELECT
     toStartOfDay(created_at) AS day,
     market_id,
@@ -119,7 +171,7 @@ WHERE created_at >= today() - INTERVAL 7 DAY
 GROUP BY day, market_id
 ORDER BY day DESC, total_volume DESC;
 
--- ✅ パーセンタイルにはquantileを使用（percentileより効率的）
+-- パーセンタイルにはquantileを使用
 SELECT
     quantile(0.50)(trade_size) AS median,
     quantile(0.95)(trade_size) AS p95,
@@ -128,81 +180,118 @@ FROM trades
 WHERE created_at >= now() - INTERVAL 1 HOUR;
 ```
 
-### ウィンドウ関数
-
-```sql
--- 累計の計算
-SELECT
-    date,
-    market_id,
-    volume,
-    sum(volume) OVER (
-        PARTITION BY market_id
-        ORDER BY date
-        ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
-    ) AS cumulative_volume
-FROM markets_analytics
-WHERE date >= today() - INTERVAL 30 DAY
-ORDER BY market_id, date;
-```
-
 ## データ挿入パターン
 
 ### バルク挿入（推奨）
 
-```typescript
-import { ClickHouse } from 'clickhouse'
+```python
+from clickhouse_connect import get_client
+from dataclasses import dataclass
+from datetime import datetime
+from typing import List
 
-const clickhouse = new ClickHouse({
-  url: process.env.CLICKHOUSE_URL,
-  port: 8123,
-  basicAuth: {
-    username: process.env.CLICKHOUSE_USER,
-    password: process.env.CLICKHOUSE_PASSWORD
-  }
-})
+@dataclass
+class Trade:
+    id: str
+    market_id: str
+    user_id: str
+    amount: float
+    timestamp: datetime
 
-// ✅ バッチ挿入（効率的）
-async function bulkInsertTrades(trades: Trade[]) {
-  const values = trades.map(trade => `(
-    '${trade.id}',
-    '${trade.market_id}',
-    '${trade.user_id}',
-    ${trade.amount},
-    '${trade.timestamp.toISOString()}'
-  )`).join(',')
+def bulk_insert_trades(trades: List[Trade]) -> None:
+    """トレードをバルク挿入"""
+    client = get_client()
 
-  await clickhouse.query(`
-    INSERT INTO trades (id, market_id, user_id, amount, timestamp)
-    VALUES ${values}
-  `).toPromise()
-}
+    # データを行のリストに変換
+    rows = [
+        [t.id, t.market_id, t.user_id, t.amount, t.timestamp]
+        for t in trades
+    ]
 
-// ❌ 個別挿入（遅い）
-async function insertTrade(trade: Trade) {
-  // ループでこれをしないでください！
-  await clickhouse.query(`
-    INSERT INTO trades VALUES ('${trade.id}', ...)
-  `).toPromise()
-}
+    client.insert(
+        "trades",
+        rows,
+        column_names=["id", "market_id", "user_id", "amount", "timestamp"]
+    )
+
+# 使用例
+trades = [
+    Trade("1", "market-1", "user-1", 100.0, datetime.now()),
+    Trade("2", "market-1", "user-2", 200.0, datetime.now()),
+]
+bulk_insert_trades(trades)
 ```
 
-### ストリーミング挿入
+### 非同期バルク挿入
 
-```typescript
-// 継続的なデータ取り込み用
-import { createWriteStream } from 'fs'
-import { pipeline } from 'stream/promises'
+```python
+from aiochclient import ChClient
+from aiohttp import ClientSession
 
-async function streamInserts() {
-  const stream = clickhouse.insert('trades').stream()
+async def async_bulk_insert(trades: List[Trade]) -> None:
+    """非同期でトレードをバルク挿入"""
+    async with ClientSession() as session:
+        client = ChClient(session)
 
-  for await (const batch of dataSource) {
-    stream.write(batch)
-  }
+        # INSERT文を構築
+        values = ", ".join([
+            f"('{t.id}', '{t.market_id}', '{t.user_id}', {t.amount}, '{t.timestamp}')"
+            for t in trades
+        ])
 
-  await stream.end()
-}
+        await client.execute(f"""
+            INSERT INTO trades (id, market_id, user_id, amount, timestamp)
+            VALUES {values}
+        """)
+```
+
+### バッファリング挿入
+
+```python
+from collections import deque
+import asyncio
+from typing import List, Any
+
+class ClickHouseBuffer:
+    """バッファリング挿入クラス"""
+
+    def __init__(self, table: str, batch_size: int = 1000, flush_interval: float = 5.0):
+        self.table = table
+        self.batch_size = batch_size
+        self.flush_interval = flush_interval
+        self.buffer: deque = deque()
+        self._flush_task: asyncio.Task = None
+
+    async def add(self, row: List[Any]) -> None:
+        """行をバッファに追加"""
+        self.buffer.append(row)
+
+        if len(self.buffer) >= self.batch_size:
+            await self.flush()
+
+    async def flush(self) -> None:
+        """バッファをフラッシュ"""
+        if not self.buffer:
+            return
+
+        rows = list(self.buffer)
+        self.buffer.clear()
+
+        client = get_client()
+        client.insert(self.table, rows)
+
+    async def start_periodic_flush(self) -> None:
+        """定期フラッシュを開始"""
+        while True:
+            await asyncio.sleep(self.flush_interval)
+            await self.flush()
+
+# 使用例
+buffer = ClickHouseBuffer("trades", batch_size=1000, flush_interval=5.0)
+asyncio.create_task(buffer.start_periodic_flush())
+
+# データを追加
+await buffer.add(["id-1", "market-1", "user-1", 100.0, datetime.now()])
 ```
 
 ## マテリアライズドビュー
@@ -238,55 +327,70 @@ GROUP BY hour, market_id;
 
 ### クエリパフォーマンス
 
-```sql
--- 遅いクエリをチェック
-SELECT
-    query_id,
-    user,
-    query,
-    query_duration_ms,
-    read_rows,
-    read_bytes,
-    memory_usage
-FROM system.query_log
-WHERE type = 'QueryFinish'
-  AND query_duration_ms > 1000
-  AND event_time >= now() - INTERVAL 1 HOUR
-ORDER BY query_duration_ms DESC
-LIMIT 10;
+```python
+def get_slow_queries(client: Client, threshold_ms: int = 1000) -> List[dict]:
+    """遅いクエリを取得"""
+    result = client.query(f"""
+        SELECT
+            query_id,
+            user,
+            query,
+            query_duration_ms,
+            read_rows,
+            read_bytes,
+            memory_usage
+        FROM system.query_log
+        WHERE type = 'QueryFinish'
+          AND query_duration_ms > {threshold_ms}
+          AND event_time >= now() - INTERVAL 1 HOUR
+        ORDER BY query_duration_ms DESC
+        LIMIT 10
+    """)
+    return [dict(zip(result.column_names, row)) for row in result.result_rows]
 ```
 
 ### テーブル統計
 
-```sql
--- テーブルサイズをチェック
-SELECT
-    database,
-    table,
-    formatReadableSize(sum(bytes)) AS size,
-    sum(rows) AS rows,
-    max(modification_time) AS latest_modification
-FROM system.parts
-WHERE active
-GROUP BY database, table
-ORDER BY sum(bytes) DESC;
+```python
+def get_table_sizes(client: Client) -> List[dict]:
+    """テーブルサイズを取得"""
+    result = client.query("""
+        SELECT
+            database,
+            table,
+            formatReadableSize(sum(bytes)) AS size,
+            sum(rows) AS rows,
+            max(modification_time) AS latest_modification
+        FROM system.parts
+        WHERE active
+        GROUP BY database, table
+        ORDER BY sum(bytes) DESC
+    """)
+    return [dict(zip(result.column_names, row)) for row in result.result_rows]
 ```
 
 ## 一般的な分析クエリ
 
 ### 時系列分析
 
-```sql
--- 日次アクティブユーザー
-SELECT
-    toDate(timestamp) AS date,
-    uniq(user_id) AS daily_active_users
-FROM events
-WHERE timestamp >= today() - INTERVAL 30 DAY
-GROUP BY date
-ORDER BY date;
+```python
+async def get_daily_active_users(client: Client, days: int = 30) -> List[dict]:
+    """日次アクティブユーザーを取得"""
+    result = client.query(f"""
+        SELECT
+            toDate(timestamp) AS date,
+            uniq(user_id) AS daily_active_users
+        FROM events
+        WHERE timestamp >= today() - {days}
+        GROUP BY date
+        ORDER BY date
+    """)
+    return [dict(zip(result.column_names, row)) for row in result.result_rows]
+```
 
--- リテンション分析
+### リテンション分析
+
+```sql
 SELECT
     signup_date,
     countIf(days_since_signup = 0) AS day_0,
@@ -309,7 +413,6 @@ ORDER BY signup_date DESC;
 ### ファネル分析
 
 ```sql
--- コンバージョンファネル
 SELECT
     countIf(step = 'viewed_market') AS viewed,
     countIf(step = 'clicked_trade') AS clicked,
@@ -327,74 +430,76 @@ FROM (
 GROUP BY session_id;
 ```
 
-### コホート分析
-
-```sql
--- サインアップ月別ユーザーコホート
-SELECT
-    toStartOfMonth(signup_date) AS cohort,
-    toStartOfMonth(activity_date) AS month,
-    dateDiff('month', cohort, month) AS months_since_signup,
-    count(DISTINCT user_id) AS active_users
-FROM (
-    SELECT
-        user_id,
-        min(toDate(timestamp)) OVER (PARTITION BY user_id) AS signup_date,
-        toDate(timestamp) AS activity_date
-    FROM events
-)
-GROUP BY cohort, month, months_since_signup
-ORDER BY cohort, months_since_signup;
-```
-
 ## データパイプラインパターン
 
 ### ETLパターン
 
-```typescript
-// Extract, Transform, Load
-async function etlPipeline() {
-  // 1. ソースから抽出
-  const rawData = await extractFromPostgres()
+```python
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+import pandas as pd
 
-  // 2. 変換
-  const transformed = rawData.map(row => ({
-    date: new Date(row.created_at).toISOString().split('T')[0],
-    market_id: row.market_slug,
-    volume: parseFloat(row.total_volume),
-    trades: parseInt(row.trade_count)
-  }))
+async def etl_pipeline():
+    """Extract, Transform, Load パイプライン"""
+    # 1. PostgreSQLから抽出
+    pg_engine = create_engine(os.environ["DATABASE_URL"])
+    with Session(pg_engine) as session:
+        raw_data = pd.read_sql(
+            "SELECT * FROM trades WHERE created_at >= NOW() - INTERVAL '1 hour'",
+            session.connection()
+        )
 
-  // 3. ClickHouseにロード
-  await bulkInsertToClickHouse(transformed)
-}
+    # 2. 変換
+    transformed = raw_data.assign(
+        date=pd.to_datetime(raw_data["created_at"]).dt.date,
+        hour=pd.to_datetime(raw_data["created_at"]).dt.floor("H")
+    )
 
-// 定期実行
-setInterval(etlPipeline, 60 * 60 * 1000)  // 1時間ごと
+    # 3. ClickHouseにロード
+    ch_client = get_client()
+    ch_client.insert_df("trades_analytics", transformed)
+
+
+# 定期実行（Celeryタスク等）
+@celery_app.task
+def run_etl():
+    asyncio.run(etl_pipeline())
 ```
 
-### 変更データキャプチャ（CDC）
+## FastAPIとの統合
 
-```typescript
-// PostgreSQLの変更を監視してClickHouseに同期
-import { Client } from 'pg'
+```python
+from fastapi import APIRouter, Depends
+from clickhouse_connect.driver import Client
 
-const pgClient = new Client({ connectionString: process.env.DATABASE_URL })
+router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
-pgClient.query('LISTEN market_updates')
+def get_ch_client() -> Client:
+    """ClickHouseクライアント依存性"""
+    return get_clickhouse_client()
 
-pgClient.on('notification', async (msg) => {
-  const update = JSON.parse(msg.payload)
+@router.get("/daily-stats")
+async def get_daily_stats(
+    days: int = 7,
+    client: Client = Depends(get_ch_client)
+):
+    """日次統計を取得"""
+    result = client.query(f"""
+        SELECT
+            date,
+            sum(volume) AS total_volume,
+            count() AS total_trades,
+            uniq(trader_id) AS unique_traders
+        FROM markets_analytics
+        WHERE date >= today() - {days}
+        GROUP BY date
+        ORDER BY date DESC
+    """)
 
-  await clickhouse.insert('market_updates', [
-    {
-      market_id: update.id,
-      event_type: update.operation,  // INSERT, UPDATE, DELETE
-      timestamp: new Date(),
-      data: JSON.stringify(update.new_data)
-    }
-  ])
-})
+    return [
+        dict(zip(result.column_names, row))
+        for row in result.result_rows
+    ]
 ```
 
 ## ベストプラクティス

@@ -2,8 +2,6 @@
 
 これはプロジェクト固有のスキルの例です。独自のプロジェクト用のテンプレートとして使用してください。
 
-実際のプロダクションアプリケーションに基づく: [Zenith](https://zenith.chat) - AI駆動の顧客発見プラットフォーム。
-
 ---
 
 ## 使用タイミング
@@ -20,32 +18,27 @@
 ## アーキテクチャ概要
 
 **技術スタック:**
-- **フロントエンド**: Next.js 15 (App Router)、TypeScript、React
-- **バックエンド**: FastAPI (Python)、Pydanticモデル
-- **データベース**: Supabase (PostgreSQL)
+- **バックエンド**: FastAPI (Python 3.11+)、Pydanticモデル
+- **データベース**: PostgreSQL + SQLAlchemy 2.0
+- **テンプレート**: Jinja2
+- **フロントエンド**: htmx + Alpine.js
 - **AI**: Claude API（ツール呼び出しと構造化出力）
-- **デプロイメント**: Google Cloud Run
-- **テスト**: Playwright (E2E)、pytest (バックエンド)、React Testing Library
+- **キャッシュ**: Redis
+- **デプロイメント**: Docker + Cloud Run
+- **テスト**: pytest、Playwright (E2E)
 
 **サービス:**
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      フロントエンド                          │
-│  Next.js 15 + TypeScript + TailwindCSS                     │
-│  デプロイ: Vercel / Cloud Run                              │
-└─────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────┐
-│                      バックエンド                            │
-│  FastAPI + Python 3.11 + Pydantic                          │
-│  デプロイ: Cloud Run                                       │
+│                      FastAPI アプリケーション                  │
+│  Python 3.11 + Pydantic + SQLAlchemy + Jinja2              │
+│  デプロイ: Cloud Run / Railway                              │
 └─────────────────────────────────────────────────────────────┘
                               │
               ┌───────────────┼───────────────┐
               ▼               ▼               ▼
         ┌──────────┐   ┌──────────┐   ┌──────────┐
-        │ Supabase │   │  Claude  │   │  Redis   │
+        │PostgreSQL│   │  Claude  │   │  Redis   │
         │ Database │   │   API    │   │  Cache   │
         └──────────┘   └──────────┘   └──────────┘
 ```
@@ -56,46 +49,74 @@
 
 ```
 project/
-├── frontend/
-│   └── src/
-│       ├── app/              # Next.js app routerページ
-│       │   ├── api/          # APIルート
-│       │   ├── (auth)/       # 認証保護ルート
-│       │   └── workspace/    # メインアプリワークスペース
-│       ├── components/       # Reactコンポーネント
-│       │   ├── ui/           # ベースUIコンポーネント
-│       │   ├── forms/        # フォームコンポーネント
-│       │   └── layouts/      # レイアウトコンポーネント
-│       ├── hooks/            # カスタムReactフック
-│       ├── lib/              # ユーティリティ
-│       ├── types/            # TypeScript定義
-│       └── config/           # 設定
+├── app/
+│   ├── __init__.py
+│   ├── main.py              # FastAPIアプリエントリ
+│   ├── config.py            # 設定（環境変数）
+│   ├── database.py          # SQLAlchemy設定
+│   ├── api/                 # APIルーター
+│   │   ├── __init__.py
+│   │   ├── auth.py          # 認証API
+│   │   ├── users.py         # ユーザーAPI
+│   │   └── markets.py       # マーケットAPI
+│   ├── models/              # SQLAlchemyモデル
+│   │   ├── __init__.py
+│   │   ├── user.py
+│   │   └── market.py
+│   ├── schemas/             # Pydanticスキーマ
+│   │   ├── __init__.py
+│   │   ├── user.py
+│   │   └── market.py
+│   ├── services/            # ビジネスロジック
+│   │   ├── __init__.py
+│   │   ├── auth_service.py
+│   │   └── market_service.py
+│   └── utils/               # ユーティリティ
+│       ├── __init__.py
+│       └── helpers.py
 │
-├── backend/
-│   ├── routers/              # FastAPIルートハンドラー
-│   ├── models.py             # Pydanticモデル
-│   ├── main.py               # FastAPIアプリエントリ
-│   ├── auth_system.py        # 認証
-│   ├── database.py           # データベース操作
-│   ├── services/             # ビジネスロジック
-│   └── tests/                # pytestテスト
+├── templates/               # Jinja2テンプレート
+│   ├── base.html
+│   ├── pages/
+│   │   ├── home.html
+│   │   └── dashboard.html
+│   └── partials/            # htmx部分テンプレート
+│       ├── market_list.html
+│       └── user_card.html
 │
-├── deploy/                   # デプロイメント設定
-├── docs/                     # ドキュメント
-└── scripts/                  # ユーティリティスクリプト
+├── static/                  # 静的ファイル
+│   ├── css/
+│   └── js/
+│
+├── tests/                   # テスト
+│   ├── conftest.py
+│   ├── test_api/
+│   └── e2e/
+│
+├── alembic/                 # マイグレーション
+│   ├── versions/
+│   └── env.py
+│
+├── deploy/                  # デプロイメント設定
+│   ├── Dockerfile
+│   └── docker-compose.yml
+│
+├── pyproject.toml           # 依存関係
+├── .env.example             # 環境変数テンプレート
+└── CLAUDE.md                # Claude Code設定
 ```
 
 ---
 
 ## コードパターン
 
-### APIレスポンス形式（FastAPI）
+### APIレスポンス形式
 
 ```python
 from pydantic import BaseModel
 from typing import Generic, TypeVar, Optional
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 class ApiResponse(BaseModel, Generic[T]):
     success: bool
@@ -111,37 +132,31 @@ class ApiResponse(BaseModel, Generic[T]):
         return cls(success=False, error=error)
 ```
 
-### フロントエンドAPI呼び出し（TypeScript）
+### ルートハンドラー
 
-```typescript
-interface ApiResponse<T> {
-  success: boolean
-  data?: T
-  error?: string
-}
+```python
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.ext.asyncio import AsyncSession
+from typing import Annotated
 
-async function fetchApi<T>(
-  endpoint: string,
-  options?: RequestInit
-): Promise<ApiResponse<T>> {
-  try {
-    const response = await fetch(`/api${endpoint}`, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-    })
+router = APIRouter(prefix="/api/markets", tags=["markets"])
 
-    if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}` }
-    }
+DbSession = Annotated[AsyncSession, Depends(get_db)]
+CurrentUser = Annotated[User, Depends(get_current_user)]
 
-    return await response.json()
-  } catch (error) {
-    return { success: false, error: String(error) }
-  }
-}
+@router.get("/", response_model=ApiResponse[list[MarketResponse]])
+async def list_markets(db: DbSession) -> ApiResponse[list[MarketResponse]]:
+    markets = await market_service.get_all(db)
+    return ApiResponse.ok([MarketResponse.model_validate(m) for m in markets])
+
+@router.post("/", response_model=ApiResponse[MarketResponse])
+async def create_market(
+    market: MarketCreate,
+    db: DbSession,
+    user: CurrentUser
+) -> ApiResponse[MarketResponse]:
+    new_market = await market_service.create(db, market, user.id)
+    return ApiResponse.ok(MarketResponse.model_validate(new_market))
 ```
 
 ### Claude AI統合（構造化出力）
@@ -179,40 +194,27 @@ async def analyze_with_claude(content: str) -> AnalysisResult:
     return AnalysisResult(**tool_use.input)
 ```
 
-### カスタムフック（React）
+### htmxパーシャルレスポンス
 
-```typescript
-import { useState, useCallback } from 'react'
+```python
+from fastapi import Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 
-interface UseApiState<T> {
-  data: T | null
-  loading: boolean
-  error: string | null
-}
+templates = Jinja2Templates(directory="templates")
 
-export function useApi<T>(
-  fetchFn: () => Promise<ApiResponse<T>>
-) {
-  const [state, setState] = useState<UseApiState<T>>({
-    data: null,
-    loading: false,
-    error: null,
-  })
-
-  const execute = useCallback(async () => {
-    setState(prev => ({ ...prev, loading: true, error: null }))
-
-    const result = await fetchFn()
-
-    if (result.success) {
-      setState({ data: result.data!, loading: false, error: null })
-    } else {
-      setState({ data: null, loading: false, error: result.error! })
-    }
-  }, [fetchFn])
-
-  return { ...state, execute }
-}
+@router.get("/search", response_class=HTMLResponse)
+async def search_markets(
+    request: Request,
+    q: str,
+    db: DbSession
+) -> HTMLResponse:
+    """htmx用の部分テンプレートを返す"""
+    markets = await market_service.search(db, q)
+    return templates.TemplateResponse(
+        "partials/market_list.html",
+        {"request": request, "markets": markets}
+    )
 ```
 
 ---
@@ -223,20 +225,20 @@ export function useApi<T>(
 
 ```bash
 # すべてのテストを実行
-poetry run pytest tests/
+pytest tests/
 
 # カバレッジ付きで実行
-poetry run pytest tests/ --cov=. --cov-report=html
+pytest tests/ --cov=app --cov-report=html
 
 # 特定のテストファイルを実行
-poetry run pytest tests/test_auth.py -v
+pytest tests/test_api/test_markets.py -v
 ```
 
 **テスト構造:**
 ```python
 import pytest
 from httpx import AsyncClient
-from main import app
+from app.main import app
 
 @pytest.fixture
 async def client():
@@ -244,42 +246,41 @@ async def client():
         yield ac
 
 @pytest.mark.asyncio
-async def test_health_check(client: AsyncClient):
-    response = await client.get("/health")
+async def test_list_markets(client: AsyncClient):
+    response = await client.get("/api/markets")
     assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
+    data = response.json()
+    assert data["success"] is True
 ```
 
-### フロントエンド（React Testing Library）
+### E2E（Playwright）
 
 ```bash
-# テストを実行
-npm run test
-
-# カバレッジ付きで実行
-npm run test -- --coverage
-
 # E2Eテストを実行
-npm run test:e2e
+pytest tests/e2e/ --browser chromium
 ```
 
 **テスト構造:**
-```typescript
-import { render, screen, fireEvent } from '@testing-library/react'
-import { WorkspacePanel } from './WorkspacePanel'
+```python
+import pytest
+from playwright.async_api import async_playwright, expect
 
-describe('WorkspacePanel', () => {
-  it('ワークスペースが正しくレンダリングされる', () => {
-    render(<WorkspacePanel />)
-    expect(screen.getByRole('main')).toBeInTheDocument()
-  })
+@pytest.mark.asyncio
+async def test_user_can_search_markets():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch()
+        page = await browser.new_page()
+        await page.goto("/")
 
-  it('セッション作成を処理する', async () => {
-    render(<WorkspacePanel />)
-    fireEvent.click(screen.getByText('新しいセッション'))
-    expect(await screen.findByText('セッションが作成されました')).toBeInTheDocument()
-  })
-})
+        # マーケットを検索
+        await page.fill('input[name="q"]', "election")
+        await page.wait_for_timeout(600)  # デバウンス
+
+        # 結果を確認
+        results = page.locator('[data-testid="market-card"]')
+        await expect(results).to_have_count(5, timeout=5000)
+
+        await browser.close()
 ```
 
 ---
@@ -289,8 +290,8 @@ describe('WorkspacePanel', () => {
 ### デプロイ前チェックリスト
 
 - [ ] すべてのテストがローカルで通る
-- [ ] `npm run build` が成功する（フロントエンド）
-- [ ] `poetry run pytest` が通る（バックエンド）
+- [ ] `ruff check .` が通る
+- [ ] `mypy app/` が通る
 - [ ] ハードコードされたシークレットがない
 - [ ] 環境変数が文書化されている
 - [ ] データベースマイグレーションが準備済み
@@ -298,28 +299,25 @@ describe('WorkspacePanel', () => {
 ### デプロイメントコマンド
 
 ```bash
-# フロントエンドをビルドしてデプロイ
-cd frontend && npm run build
-gcloud run deploy frontend --source .
+# Dockerイメージをビルド
+docker build -t myapp .
 
-# バックエンドをビルドしてデプロイ
-cd backend
-gcloud run deploy backend --source .
+# Cloud Runにデプロイ
+gcloud run deploy myapp \
+  --source . \
+  --region asia-northeast1 \
+  --allow-unauthenticated
 ```
 
 ### 環境変数
 
 ```bash
-# フロントエンド（.env.local）
-NEXT_PUBLIC_API_URL=https://api.example.com
-NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJ...
-
-# バックエンド（.env）
-DATABASE_URL=postgresql://...
+# .env.example
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost/dbname
+REDIS_URL=redis://localhost:6379/0
 ANTHROPIC_API_KEY=sk-ant-...
-SUPABASE_URL=https://xxx.supabase.co
-SUPABASE_KEY=eyJ...
+SECRET_KEY=your-secret-key
+DEBUG=false
 ```
 
 ---
@@ -331,15 +329,15 @@ SUPABASE_KEY=eyJ...
 3. **TDD** - 実装前にテストを書く
 4. **80%カバレッジ** 最低限
 5. **多くの小さなファイル** - 通常200-400行、最大800行
-6. **console.log禁止** プロダクションコードで
-7. **適切なエラーハンドリング** try/catchで
-8. **入力検証** Pydantic/Zodで
+6. **print文禁止** プロダクションコードで
+7. **適切なエラーハンドリング** try/exceptで
+8. **入力検証** Pydanticで
 
 ---
 
 ## 関連スキル
 
 - `coding-standards.md` - 一般的なコーディングベストプラクティス
-- `backend-patterns.md` - APIとデータベースパターン
-- `frontend-patterns.md` - ReactとNext.jsパターン
+- `backend-patterns.md` - FastAPIとSQLAlchemyパターン
+- `frontend-patterns.md` - htmxとJinja2パターン
 - `tdd-workflow/` - テスト駆動開発手法
