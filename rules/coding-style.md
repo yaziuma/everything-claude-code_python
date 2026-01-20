@@ -45,20 +45,33 @@ def process_items(items: list[str]) -> list[str]:
 
 ### ディレクトリ構造
 
+実用的なレイヤーアーキテクチャ（Pragmatic Layered Architecture）を採用：
 ```
 app/
-├── users/
-│   ├── __init__.py
-│   ├── router.py      # APIエンドポイント
-│   ├── service.py     # ビジネスロジック
-│   ├── repository.py  # データアクセス
-│   ├── schemas.py     # Pydanticモデル
-│   └── models.py      # SQLAlchemyモデル
-├── items/
-│   └── ...
-└── core/
-    ├── config.py
-    └── dependencies.py
+├── main.py              # アプリ起動・設定
+├── core/                # 全体設定・インフラ基盤
+│   ├── config.py        # 環境変数設定
+│   └── db.py            # DB接続・セッション管理
+├── api/                 # Presentation層 (Web I/F)
+│   ├── dependencies.py  # 共通の依存性注入
+│   ├── routers/         # URLルーティング
+│   │   ├── users.py
+│   │   └── items.py
+│   └── schemas/         # Pydanticモデル (API入出力DTO)
+│       ├── user.py
+│       └── item.py
+├── services/            # Application層 (ビジネスロジック)
+│   ├── user_service.py
+│   └── item_service.py
+├── models/              # Domain & Infrastructure (SQLAlchemyモデル)
+│   ├── user.py          # DBテーブル定義 兼 ドメインエンティティ
+│   └── item.py
+├── repositories/        # Infrastructure層 (データアクセス)
+│   ├── base.py          # 共通CRUD操作
+│   └── user_repo.py     # 具体的なクエリ操作
+└── templates/           # Jinja2テンプレート
+    ├── base.html
+    └── pages/
 ```
 
 ## エラーハンドリング
