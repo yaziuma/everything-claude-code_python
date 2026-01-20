@@ -189,8 +189,8 @@ Python + htmx Webアプリケーションのアーキテクチャ例：
 - **テンプレート**：Jinja2
 - **フロントエンド**：htmx + Alpine.js（必要に応じて）
 - **データベース**：PostgreSQL（SQLAlchemy）
-- **キャッシュ**：Redis
-- **タスクキュー**：Celery（オプション）
+- **キャッシュ**：インメモリ（必要に応じてRedisを検討）
+- **タスクキュー**：AsyncIO（オプション。大規模時はCelery/Redis）
 
 ### ディレクトリ構造
 ```
