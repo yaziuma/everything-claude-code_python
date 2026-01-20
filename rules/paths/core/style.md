@@ -1,6 +1,7 @@
 ---
 paths:
   - "app/**/*.py"
+  - "tests/**/*.py"  
 ---
 # Core Style (Python)
 
