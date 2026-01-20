@@ -195,28 +195,33 @@ Python + htmx Webアプリケーションのアーキテクチャ例：
 ### ディレクトリ構造
 ```
 app/
-├── main.py              # FastAPIアプリケーション
-├── config.py            # 設定管理
-├── dependencies.py      # 依存性注入
-├── api/                 # APIルーター
-│   ├── __init__.py
-│   ├── users.py
-│   └── items.py
-├── models/              # SQLAlchemyモデル
-│   ├── __init__.py
-│   ├── user.py
-│   └── item.py
-├── schemas/             # Pydanticスキーマ
-│   ├── __init__.py
-│   ├── user.py
-│   └── item.py
-├── services/            # ビジネスロジック
-│   ├── __init__.py
-│   ├── user_service.py
+├── main.py              # アプリ起動・設定
+├── core/                # 全体設定・インフラ基盤
+│   ├── config.py        # 環境変数設定 (pydantic-settings)
+│   └── db.py            # DB接続・セッション管理
+├── api/                 # Presentation層 (Web I/F)
+│   ├── init.py
+│   ├── dependencies.py  # 共通の依存性注入 (Auth, CurrentUser等)
+│   ├── routers/         # URLルーティング
+│   │   ├── init.py
+│   │   ├── users.py
+│   │   └── items.py
+│   └── schemas/         # Pydanticモデル (API入出力DTO)
+│       ├── init.py
+│       ├── user.py
+│       └── item.py
+├── services/            # Application層 (ビジネスロジック)
+│   ├── init.py
+│   ├── user_service.py  # ユーザー関連のユースケース実装
 │   └── item_service.py
-├── repositories/        # データアクセス
-│   ├── __init__.py
-│   └── base.py
+├── models/              # Domain & Infrastructure (SQLAlchemyモデル)
+│   ├── init.py
+│   ├── user.py          # DBテーブル定義 兼 ドメインエンティティ
+│   └── item.py
+├── repositories/        # Infrastructure層 (データアクセス)
+│   ├── init.py
+│   ├── base.py          # 共通CRUD操作
+│   └── user_repo.py     # 具体的なクエリ操作
 └── templates/           # Jinja2テンプレート
     ├── base.html
     ├── components/
