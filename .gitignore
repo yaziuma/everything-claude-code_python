@@ -27,3 +27,4 @@ env/
 # Note: uv.lock SHOULD be committed to git (like package-lock.json)
 *:Zone.Identifier
 
+*.Identifier

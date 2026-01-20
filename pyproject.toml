@@ -19,6 +19,7 @@ dev-dependencies = [
     "pytest-asyncio",
     "pytest-cov",
     "pytest-playwright",
+    "pytest-xdist",  
     "mypy",
     "ruff",
 ]
